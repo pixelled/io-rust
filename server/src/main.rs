@@ -37,8 +37,8 @@ async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, E
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .service(web::resource("/").route(web::get().to(index)))
-            .service(fs::Files::new("/", "static/").index_file("index.html"))
+            // .service(web::resource("/").route(web::get().to(index)))
+            .service(fs::Files::new("/", "dist/").index_file("index.html"))
     })
     .bind("127.0.0.1:8080")?
     .run()

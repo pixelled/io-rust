@@ -2,5 +2,5 @@
 
 set -ex
 
-wasm-pack build --target web
-py -m http.server
+wasm-pack build --target web --out-dir ../dist/pkg
+cp index.html ../dist
