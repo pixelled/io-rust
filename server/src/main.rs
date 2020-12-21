@@ -5,11 +5,18 @@ use actix_files as fs;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
+use game_shared::{GameState, Movement};
+use std::sync::Mutex;
+use std::collections::VecDeque;
+use std::ops::DerefMut;
+
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
+const TICK_RATE: Duration = Duration::from_millis(16);
 
 struct WsSession {
     hb: Instant,
+    state: web::Data<Mutex<AppState>>,
 }
 
 impl Actor for WsSession {
@@ -17,6 +24,13 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
+        self.state.lock().unwrap().game.add_player();
+        ctx.run_interval(TICK_RATE, |act, ctx| {
+            let mut state =  act.state.lock().unwrap();
+            let AppState { game, commands } = state.deref_mut();
+            game.update(commands);
+            ctx.binary(game.serialize());
+        });
     }
 }
 
@@ -26,14 +40,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
         msg: Result<ws::Message, ws::ProtocolError>,
         ctx: &mut Self::Context,
     ) {
-        println!("Message received");
         match msg {
             Ok(ws::Message::Pong(_)) => {
-                println!("Pong received!");
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Binary(bin)) => {
-                ctx.binary(bin);
+                self.state.lock().unwrap().commands.push_back(Movement::deserialize(bin.as_ref()));
             }
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
@@ -57,9 +69,15 @@ impl WsSession {
     }
 }
 
-async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+struct AppState {
+    commands: VecDeque<Movement>,
+    game: GameState,
+}
+
+async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<Mutex<AppState>>) -> Result<HttpResponse, Error> {
     let res = ws::start(WsSession {
         hb: Instant::now(),
+        state: data,
     }, &req, stream);
     println!("{:?}", res);
     res
@@ -69,6 +87,10 @@ async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, E
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
+            .data(Mutex::new(AppState {
+                commands: VecDeque::new(),
+                game: GameState::new(),
+            }))
             .service(web::resource("/ws").route(web::get().to(index)))
             .service(fs::Files::new("/", "dist/").index_file("index.html"))
     })

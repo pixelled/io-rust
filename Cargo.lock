@@ -834,6 +834,7 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "futures",
+ "game-shared",
 ]
 
 [[package]]
