@@ -85,12 +85,13 @@ async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<Mutex<App
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    let state = web::Data::new(Mutex::new(AppState {
+        commands: VecDeque::new(),
+        game: GameState::new()
+    }));
+    HttpServer::new(move || {
         App::new()
-            .data(Mutex::new(AppState {
-                commands: VecDeque::new(),
-                game: GameState::new(),
-            }))
+            .app_data(state.clone())
             .service(web::resource("/ws").route(web::get().to(index)))
             .service(fs::Files::new("/", "dist/").index_file("index.html"))
     })
