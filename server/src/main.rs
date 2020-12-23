@@ -5,18 +5,26 @@ use actix_files as fs;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-use game_shared::{GameState, Movement};
-use std::sync::Mutex;
-use std::collections::VecDeque;
-use std::ops::DerefMut;
+use game_shared::{RenderState, Operation};
+use crate::server::{GameServer, GameProxy};
+use bevy::ecs::{IntoSystem, Entity};
+use bevy::MinimalPlugins;
+use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer, EventListener};
+use bevy::app::ScheduleRunnerSettings;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
-const TICK_RATE: Duration = Duration::from_millis(16);
+pub const TICK_TIME: Duration = Duration::from_millis(16);
 
-struct WsSession {
+mod component;
+mod system;
+mod event;
+mod server;
+
+pub struct WsSession {
     hb: Instant,
-    state: web::Data<Mutex<AppState>>,
+    player_entity: Entity,
+    proxy: GameProxy,
 }
 
 impl Actor for WsSession {
@@ -24,13 +32,26 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        self.state.lock().unwrap().game.add_player();
-        ctx.run_interval(TICK_RATE, |act, ctx| {
-            let mut state =  act.state.lock().unwrap();
-            let AppState { game, commands } = state.deref_mut();
-            game.update(commands);
-            ctx.binary(game.serialize());
-        });
+        let (sender, receiver) = futures::channel::oneshot::channel();
+        self.proxy.create_player("".to_string(), sender, ctx.address());
+        receiver.into_actor(self).then(|e, act, _ctx| {
+            act.player_entity = e.unwrap();
+            fut::ready(())
+        }).wait(ctx);
+    }
+}
+
+struct PlayerView(RenderState);
+
+impl Message for PlayerView {
+    type Result = ();
+}
+
+impl Handler<PlayerView> for WsSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: PlayerView, ctx: &mut Self::Context) -> Self::Result {
+        ctx.binary(msg.0.serialize());
     }
 }
 
@@ -45,7 +66,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Binary(bin)) => {
-                self.state.lock().unwrap().commands.push_back(Movement::deserialize(bin.as_ref()));
+                match Operation::deserialize(bin.as_ref()) {
+                    Operation::Join(_) => {}
+                    Operation::Update(direction) => self.proxy.change_movement(self.player_entity, direction),
+                    Operation::Leave => self.proxy.remove_player(self.player_entity),
+                }
             }
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
@@ -69,33 +94,48 @@ impl WsSession {
     }
 }
 
-struct AppState {
-    commands: VecDeque<Movement>,
-    game: GameState,
-}
-
-async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<Mutex<AppState>>) -> Result<HttpResponse, Error> {
+async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<GameProxy>) -> Result<HttpResponse, Error> {
     let res = ws::start(WsSession {
         hb: Instant::now(),
-        state: data,
+        player_entity: Entity::new(0),
+        proxy: data.as_ref().clone(),
     }, &req, stream);
     println!("{:?}", res);
     res
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let state = web::Data::new(Mutex::new(AppState {
-        commands: VecDeque::new(),
-        game: GameState::new()
-    }));
+async fn main() {
+    let (s1, r1) = futures::channel::mpsc::unbounded();
+    let (s2, r2) = futures::channel::mpsc::unbounded();
+    let (s3, r3) = futures::channel::mpsc::unbounded();
+
+    futures::future::join(async {
+        bevy::prelude::App::build()
+            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 60.0)))
+            .add_plugins(MinimalPlugins)
+            .add_event::<CreatePlayer>()
+            .add_event::<ChangeMovement>()
+            .add_event::<RemovePlayer>()
+            .add_resource(GameServer::new())
+            .add_resource(EventListener(r1))
+            .add_resource(EventListener(r2))
+            .add_resource(EventListener(r3))
+            .add_system(event::trigger_events.system())
+            .add_system(system::remove_player.system())
+            .add_system(system::create_player.system())
+            .add_system(system::change_movement.system())
+            .add_system(system::next_frame.system())
+            .add_system(system::extract_render_state.system())
+            .run();
+    },
     HttpServer::new(move || {
         App::new()
-            .app_data(state.clone())
+            .data(GameProxy::new(s1.clone(), s2.clone(), s3.clone()))
             .service(web::resource("/ws").route(web::get().to(index)))
             .service(fs::Files::new("/", "dist/").index_file("index.html"))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:8080").unwrap()
     .run()
-    .await
+    ).await;
 }

@@ -1,80 +1,41 @@
-use std::time::{Instant, Duration};
+use std::time::Duration;
 use serde::{Serialize, Deserialize};
-use std::collections::VecDeque;
 
 #[derive(Serialize, Deserialize)]
-pub enum Movement {
-    Up,
-    Right,
-    Down,
-    Left,
-    NoAction,
+pub enum Operation {
+    Join(String),
+    Update(Option<f32>),
+    Leave,
 }
 
-impl Movement {
+impl Operation {
     pub fn serialize(&self) -> Vec<u8> {
-        bincode::serialize(&self).expect("Cannot serialize Movement.")
+        bincode::serialize(&self).expect("Cannot serialize Operation.")
     }
 
     pub fn deserialize(data: &[u8]) -> Self {
-        bincode::deserialize(data).expect("Cannot deserialize to Movement.")
+        bincode::deserialize(data).expect("Cannot deserialize to Operation.")
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Pos {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Position {
     pub x: f32,
     pub y: f32,
-    acc: (f32, f32),
-    vel: (f32, f32),
 }
 
-struct Velocity {
-    x: f32,
-    y: f32,
-}
-
-struct Acceleration {
-    x: f32,
-    y: f32,
-}
-
-impl Pos {
-    pub fn new() -> Self {
-        Pos {
-            x: 100.0,
-            y: 100.0,
-            acc: (0.5, 0.5),
-            vel: (0.0, 0.0),
-        }
-    }
-
-    pub fn advance(&mut self, dir: Movement) {
-        match dir {
-            Movement::Up => self.vel.1 -= self.acc.1,
-            Movement::Right => self.vel.0 += self.acc.0,
-            Movement::Down => self.vel.1 += self.acc.1,
-            Movement::Left => self.vel.0 -= self.acc.0,
-            Movement::NoAction => {
-                self.vel = (self.vel.0 * 0.96, self.vel.1 * 0.96);
-            }
-        }
-        self.x += self.vel.0;
-        self.y += self.vel.1;
-    }
-}
-
-pub type Id = String;
-
-#[derive(Serialize, Deserialize)]
-pub struct GameState {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RenderState {
     pub time: Duration,
-    pub positions: Vec<(Id, Pos)>,
+    pub positions: Vec<(String, Position)>,
 }
 
-impl GameState {
+impl RenderState {
     pub fn new() -> Self {
-        GameState { time: Instant::now().elapsed(), positions: Vec::new() }
+        RenderState {
+            time: Duration::from_nanos(0),
+            positions: Vec::new(),
+        }
     }
 
     pub fn serialize(&self) -> Vec<u8> {
@@ -83,17 +44,5 @@ impl GameState {
 
     pub fn deserialize(data: &[u8]) -> Self {
         bincode::deserialize(data).expect("Cannot deserialize to State.")
-    }
-
-    pub fn add_player(&mut self) {
-        self.positions.push(("Peach".to_owned(), Pos::new()));
-    }
-
-    pub fn update(&mut self, commands: &mut VecDeque<Movement>) {
-        if !commands.is_empty() {
-            commands.drain(..).for_each(|m| self.positions[0].1.advance(m));
-        } else {
-            self.positions[0].1.advance(Movement::NoAction);
-        }
     }
 }

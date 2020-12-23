@@ -1,17 +1,18 @@
-<html>
+<html lang="en">
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+      <title>Game</title>
   </head>
   <body>
   	<script type="module">
   		import init from './pkg/game_client.js';
   		async function run() {
   			await init();
-  			console.log("Success!");
+  			console.log("Load success!");
   		}
 
   		run();
   	</script>
-    <canvas id="canvas" width="1920" height="1080"/>
+    <canvas id="canvas" width="1920" height="1080"></canvas>
   </body>
 </html>
