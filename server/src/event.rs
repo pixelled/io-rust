@@ -1,4 +1,4 @@
-use bevy::ecs::{Entity, Command, Resources, World, ResMut};
+use bevy::ecs::{Entity, ResMut};
 use crate::component::Acceleration;
 use futures::channel::oneshot::Sender;
 use actix::Addr;
@@ -35,15 +35,6 @@ pub struct RemovePlayer {
 pub struct ChangeMovement {
     pub(crate) player: Entity,
     pub(crate) direction: Option<f32>,
-}
-
-impl Command for ChangeMovement {
-    fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
-        let mut acc = world.get_mut::<Acceleration>(self.player).expect("No component found.");
-        let (ay, ax) = self.direction.map_or((0.0, 0.0), |dir| dir.sin_cos());
-        acc.x = ax * 100.0;
-        acc.y = ay * 100.0;
-    }
 }
 
 pub fn trigger_events(

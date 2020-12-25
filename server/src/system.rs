@@ -2,7 +2,7 @@ use crate::{TICK_TIME, PlayerView};
 use crate::component::{Position, Velocity, Acceleration, Player};
 use crate::event::{CreatePlayer, ChangeMovement, RemovePlayer};
 use bevy::app::{Events, EventReader};
-use bevy::ecs::{Query, Commands, ResMut, Local, Res};
+use bevy::ecs::{Query, Commands, ResMut, Local, Res, Command, World, Resources};
 use game_shared::RenderState;
 use crate::server::GameServer;
 use rand::Rng;
@@ -24,6 +24,15 @@ pub fn create_player(
         game_state.sessions.insert(entity, event.session.clone());
         event.sender.send(entity);
         println!("Player {} (#{}) joined the game.", event.name, entity.id());
+    }
+}
+
+impl Command for ChangeMovement {
+    fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
+        let mut acc = world.get_mut::<Acceleration>(self.player).expect("No component found.");
+        let (ay, ax) = self.direction.map_or((0.0, 0.0), |dir| dir.sin_cos());
+        acc.x = ax * 100.0;
+        acc.y = ay * 100.0;
     }
 }
 
@@ -54,8 +63,8 @@ pub fn next_frame(mut game_state: ResMut<GameServer>, mut query: Query<(&mut Pos
         pos.x = pos.x.rem_euclid(1000.0);
         pos.y += dt * vel.y;
         pos.y = pos.y.rem_euclid(1000.0);
-        vel.x += dt * (acc.x - 0.4 * vel.x);
-        vel.y += dt * (acc.y - 0.4 * vel.y);
+        vel.x += dt * (acc.x - 0.5 * vel.x);
+        vel.y += dt * (acc.y - 0.5 * vel.y);
     }
 }
 
