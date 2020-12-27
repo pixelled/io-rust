@@ -187,9 +187,6 @@ pub async fn start() {
         let event: &MouseEvent = event.dyn_ref().unwrap_throw();
         let mut state = control_state3.lock_mut();
         state.cursor = (event.client_x() - center_x as i32, event.client_y() - center_y as i32);
-        let js1: JsValue = state.cursor.0.into();
-        let js2: JsValue = state.cursor.1.into();
-        web_sys::console::log_2(&js1, &js2);
     }).forget();
 
     let mut name_stream = name_state.signal().to_stream();
@@ -219,22 +216,29 @@ trait Render {
 
 impl Render for RenderState {
     fn render(&self, ctx: &mut web_sys::CanvasRenderingContext2d) {
-        ctx.clear_rect(0.0, 0.0, ctx.canvas().unwrap().width().into(), ctx.canvas().unwrap().height().into());
-        for (name, pos, ori) in self.positions.iter() {
+        let canvas = ctx.canvas().unwrap();
+        let can_width = canvas.width() as f32;
+        let can_height = canvas.height() as f32;
+        ctx.clear_rect(0.0, 0.0, can_width.into(), can_height.into());
+        let offset_x = self.self_pos.x - can_width / 2.0;
+        let offset_y = self.self_pos.y - can_height / 2.0;
+        self.positions.iter().for_each(|(name, pos, ori)| {
+            let x = pos.x - offset_x;
+            let y = pos.y - offset_y;
             ctx.begin_path();
             // Render circle.
             ctx.set_fill_style(&JsValue::from_str("#13579B"));
-            ctx.arc(pos.x.into(), pos.y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
+            ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
                .unwrap();
             ctx.stroke();
             ctx.fill();
             // Render small circle.
             ctx.set_fill_style(&JsValue::from_str("#000000"));
-            ctx.arc((pos.x + 20.0 * ori.cos()).into(), (pos.y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
+            ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
             ctx.stroke();
             // Render texts.
             ctx.set_font("30px Comic Sans MS");
-            ctx.fill_text(name, (pos.x + 30.0).into(), (pos.y - 15.0).into()).unwrap();
-        }
+            ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
+        });
     }
 }
