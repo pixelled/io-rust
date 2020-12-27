@@ -23,7 +23,7 @@ mod server;
 
 pub struct WsSession {
     hb: Instant,
-    player_entity: Entity,
+    player_entity: Option<Entity>,
     proxy: GameProxy,
 }
 
@@ -32,12 +32,6 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        let (sender, receiver) = futures::channel::oneshot::channel();
-        self.proxy.create_player("".to_string(), sender, ctx.address());
-        receiver.into_actor(self).then(|e, act, _ctx| {
-            act.player_entity = e.unwrap();
-            fut::ready(())
-        }).wait(ctx);
     }
 }
 
@@ -67,12 +61,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             }
             Ok(ws::Message::Binary(bin)) => {
                 match Operation::deserialize(bin.as_ref()) {
-                    Operation::Join(_) => {}
+                    Operation::Join(name) => {
+                        let (sender, receiver) = futures::channel::oneshot::channel();
+                        self.proxy.create_player(name, sender, ctx.address());
+                        receiver.into_actor(self).then(|e, act, _ctx| {
+                            act.player_entity = Some(e.unwrap());
+                            fut::ready(())
+                        }).wait(ctx);
+                    }
                     Operation::Update(direction) => self.proxy.change_movement(self.player_entity, direction),
+                    // Unused
                     Operation::Leave => self.proxy.remove_player(self.player_entity),
                 }
             }
             Ok(ws::Message::Close(reason)) => {
+                self.proxy.remove_player(self.player_entity);
                 ctx.close(reason);
                 ctx.stop();
             }
@@ -86,6 +89,7 @@ impl WsSession {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
                 println!("Heartbeat failed!");
+                act.proxy.remove_player(act.player_entity);
                 ctx.stop();
                 return;
             }
@@ -97,7 +101,7 @@ impl WsSession {
 async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<GameProxy>) -> Result<HttpResponse, Error> {
     let res = ws::start(WsSession {
         hb: Instant::now(),
-        player_entity: Entity::new(0),
+        player_entity: None,
         proxy: data.as_ref().clone(),
     }, &req, stream);
     println!("{:?}", res);

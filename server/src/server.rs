@@ -39,11 +39,15 @@ impl GameProxy {
         self.s1.unbounded_send(CreatePlayer { name, sender, session }).unwrap();
     }
 
-    pub fn change_movement(&mut self, player: Entity, direction: Option<f32>) {
-        self.s2.unbounded_send(ChangeMovement { player, direction }).unwrap();
+    pub fn change_movement(&mut self, player: Option<Entity>, direction: Option<f32>) {
+        if let Some(player) = player {
+            self.s2.unbounded_send(ChangeMovement { player, direction }).unwrap();
+        }
     }
 
-    pub fn remove_player(&mut self, player: Entity) {
-        self.s3.unbounded_send(RemovePlayer { player }).unwrap();
+    pub fn remove_player(&mut self, player: Option<Entity>) {
+        if let Some(player) = player {
+            self.s3.unbounded_send(RemovePlayer { player }).unwrap();
+        }
     }
 }

@@ -49,6 +49,23 @@ impl<S, A> Stream for WithLatest<S, A> where S: Stream + Unpin, A: Stream + Unpi
     }
 }
 
+#[derive(Copy, Clone)]
+struct NameState {
+    entered: bool,
+}
+
+impl NameState {
+    pub fn new() -> Self {
+        NameState{
+            entered: false,
+        }
+    }
+
+    pub fn enter_down(&mut self) {
+        self.entered = true;
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 struct ControlState {
     up: bool,
@@ -69,8 +86,8 @@ impl ControlState {
         let mut dy = 0;
         dx -= self.left as i32;
         dx += self.right as i32;
-        dy += self.up as i32;
-        dy -= self.down as i32;
+        dy -= self.up as i32;
+        dy += self.down as i32;
         if dx == 0 && dy == 0 {
             None
         } else {
@@ -116,6 +133,37 @@ pub async fn start() {
     console_error_panic_hook::set_once();
 
     let document = web_sys::window().unwrap().document().unwrap();
+    let canvas = document.get_element_by_id("canvas").unwrap();
+    let canvas: web_sys::HtmlCanvasElement = canvas
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .map_err(|_| ())
+        .unwrap();
+    let mut context = canvas
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .unwrap();
+
+    let name_input = document.get_element_by_id("nameInput").unwrap();
+    let name_input: web_sys::HtmlInputElement = name_input
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .map_err(|_|())
+        .unwrap();
+    let name_state = Mutable::new(NameState::new());
+    let name_state1 = name_state.clone();
+    let _enter_listener = EventListener::new(&name_input, "keydown", move |event| {
+        let event: &KeyboardEvent = event.dyn_ref().unwrap_throw();
+        let mut state = name_state1.lock_mut();
+        match event.code().as_ref() {
+            "Enter" => {
+                // ws_sender.send(WsMessage::Binary(Operation::Join().serialize())).await;
+                state.enter_down();
+            },
+            _ => (),
+        }
+    });
+
     let control_state = Mutable::new(ControlState::new());
     let control_state1 = control_state.clone();
     EventListener::new(&document, "keydown", move |event| {
@@ -141,21 +189,14 @@ pub async fn start() {
             _ => (),
         }
     }).forget();
-    let canvas = document.get_element_by_id("canvas").unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .map_err(|_| ())
-        .unwrap();
 
-    let mut context = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()
-        .unwrap();
+    let mut name_stream = name_state.signal().to_stream();
+    name_stream.next().await;
+    name_stream.next().await;
+    name_input.style().set_property("display","none");
 
     let (mut ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None).await.expect("Websocket connection failed.");
-    // ws_stream.send(WsMessage::Binary(Operation::Join("".to_owned()).serialize())).await;
+    ws_stream.send(WsMessage::Binary(Operation::Join(name_input.value()).serialize())).await;
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let control_state_signal = control_state.signal();
     let mut stream = with_latest(ws_receiver, control_state_signal.to_stream())
@@ -177,7 +218,7 @@ trait Render {
 impl Render for RenderState {
     fn render(&self, ctx: &mut web_sys::CanvasRenderingContext2d) {
         ctx.clear_rect(0.0, 0.0, ctx.canvas().unwrap().width().into(), ctx.canvas().unwrap().height().into());
-        for (id, pos) in self.positions.iter() {
+        for (name, pos) in self.positions.iter() {
             ctx.begin_path();
             // Draw a circle.
             ctx.set_fill_style(&JsValue::from_str("#13579B"));
@@ -188,7 +229,7 @@ impl Render for RenderState {
             // Render texts.
             ctx.set_fill_style(&JsValue::from_str("#000000"));
             ctx.set_font("30px Comic Sans MS");
-            ctx.fill_text("Peach", (pos.x + 30.0).into(), (pos.y - 15.0).into()).unwrap();
+            ctx.fill_text(name, (pos.x + 30.0).into(), (pos.y - 15.0).into()).unwrap();
         }
     }
 }

@@ -2,6 +2,14 @@
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
       <title>Game</title>
+      <style>
+          html, body, #canvas {
+              border: 0;
+              margin: 0;
+              padding: 0;
+              overflow: hidden;
+          }
+      </style>
   </head>
   <body>
   	<script type="module">
@@ -13,6 +21,18 @@
 
   		run();
   	</script>
-    <canvas id="canvas" width="1920" height="1080"></canvas>
+    <canvas id="canvas"></canvas>
+    <div id="inputContainer" style="position: absolute; left: 42%; top: 42%">
+        <input id="nameInput" style="width: 300px; height: 40px; font-size: 40px" />
+    </div>
+    <script>
+        let can = document.getElementById("canvas");
+        const resize = () => {
+            can.width = window.innerWidth;
+            can.height = window.innerHeight;
+        }
+        window.addEventListener("resize", resize, false);
+        resize();
+    </script>
   </body>
 </html>

@@ -22,6 +22,7 @@ gloo = "0.2"
 version = "0.3"
 features = [
     "CanvasRenderingContext2d",
+    "CssStyleDeclaration",
     "Document",
     "Element",
     "KeyboardEvent",
