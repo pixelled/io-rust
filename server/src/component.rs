@@ -4,6 +4,8 @@ pub struct Player {
 
 pub use game_shared::Position;
 
+pub use game_shared::Ori;
+
 pub struct Velocity {
     pub(crate) x: f32,
     pub(crate) y: f32,

@@ -69,7 +69,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                             fut::ready(())
                         }).wait(ctx);
                     }
-                    Operation::Update(direction) => self.proxy.change_movement(self.player_entity, direction),
+                    Operation::Update(player_state) => self.proxy.change_movement(self.player_entity, player_state),
                     // Unused
                     Operation::Leave => self.proxy.remove_player(self.player_entity),
                 }

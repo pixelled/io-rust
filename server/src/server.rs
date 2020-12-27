@@ -6,6 +6,7 @@ use bevy::ecs::Entity;
 use crate::event::{CreatePlayer, ChangeMovement, RemovePlayer};
 use futures::channel::mpsc::UnboundedSender;
 use futures::channel::oneshot::Sender;
+use game_shared::PlayerState;
 
 pub struct GameServer {
     start_time: Instant,
@@ -39,9 +40,9 @@ impl GameProxy {
         self.s1.unbounded_send(CreatePlayer { name, sender, session }).unwrap();
     }
 
-    pub fn change_movement(&mut self, player: Option<Entity>, direction: Option<f32>) {
+    pub fn change_movement(&mut self, player: Option<Entity>, state: PlayerState) {
         if let Some(player) = player {
-            self.s2.unbounded_send(ChangeMovement { player, direction }).unwrap();
+            self.s2.unbounded_send(ChangeMovement { player, state }).unwrap();
         }
     }
 

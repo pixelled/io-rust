@@ -5,6 +5,7 @@ use actix::Addr;
 use futures::channel::mpsc::UnboundedReceiver;
 use bevy::app::Events;
 use crate::WsSession;
+use game_shared::PlayerState;
 
 pub struct EventListener<T>(pub UnboundedReceiver<T>);
 
@@ -34,7 +35,7 @@ pub struct RemovePlayer {
 #[derive(Clone)]
 pub struct ChangeMovement {
     pub(crate) player: Entity,
-    pub(crate) direction: Option<f32>,
+    pub(crate) state: PlayerState,
 }
 
 pub fn trigger_events(

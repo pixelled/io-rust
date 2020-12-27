@@ -2,7 +2,7 @@ use std::f64;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use game_shared::{RenderState, Operation};
+use game_shared::{RenderState, Operation, PlayerState};
 use ws_stream_wasm::{WsStream, WsMeta, WsMessage};
 use futures::{stream, StreamExt, SinkExt, Stream};
 use std::collections::VecDeque;
@@ -14,7 +14,7 @@ use futures::stream::select;
 use pin_project::pin_project;
 use gloo::events::EventListener;
 use futures_signals::signal::{Mutable, SignalExt};
-use web_sys::KeyboardEvent;
+use web_sys::{KeyboardEvent, MouseEvent};
 use std::fmt::Debug;
 
 fn with_latest<S, A>(src: S, acc: A) -> WithLatest<S, A> where S: Stream, A: Stream {
@@ -49,39 +49,23 @@ impl<S, A> Stream for WithLatest<S, A> where S: Stream + Unpin, A: Stream + Unpi
     }
 }
 
-#[derive(Copy, Clone)]
-struct NameState {
-    entered: bool,
-}
-
-impl NameState {
-    pub fn new() -> Self {
-        NameState{
-            entered: false,
-        }
-    }
-
-    pub fn enter_down(&mut self) {
-        self.entered = true;
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 struct ControlState {
     up: bool,
     left: bool,
     down: bool,
     right: bool,
+    cursor: (i32, i32),
 }
 
 impl ControlState {
     pub fn new() -> Self {
         ControlState {
-            up: false, left: false, down: false, right: false
+            up: false, left: false, down: false, right: false, cursor: (0, 0),
         }
     }
 
-    pub fn dir(&self) -> Option<f32> {
+    pub fn state(&self) -> PlayerState {
         let mut dx = 0;
         let mut dy = 0;
         dx -= self.left as i32;
@@ -89,9 +73,15 @@ impl ControlState {
         dy -= self.up as i32;
         dy += self.down as i32;
         if dx == 0 && dy == 0 {
-            None
+            PlayerState {
+                dir: None,
+                ori: (self.cursor.1 as f32).atan2(self.cursor.0 as f32),
+            }
         } else {
-            Some((dy as f32).atan2(dx as f32))
+            PlayerState {
+                dir: Some((dy as f32).atan2(dx as f32)),
+                ori: (self.cursor.1 as f32).atan2(self.cursor.0 as f32),
+            }
         }
     }
 
@@ -150,15 +140,14 @@ pub async fn start() {
         .dyn_into::<web_sys::HtmlInputElement>()
         .map_err(|_|())
         .unwrap();
-    let name_state = Mutable::new(NameState::new());
+    let name_state = Mutable::new(false);
     let name_state1 = name_state.clone();
     let _enter_listener = EventListener::new(&name_input, "keydown", move |event| {
         let event: &KeyboardEvent = event.dyn_ref().unwrap_throw();
-        let mut state = name_state1.lock_mut();
+        // let mut state = name_state1.lock_mut();
         match event.code().as_ref() {
             "Enter" => {
-                // ws_sender.send(WsMessage::Binary(Operation::Join().serialize())).await;
-                state.enter_down();
+                name_state1.set(true);
             },
             _ => (),
         }
@@ -190,6 +179,19 @@ pub async fn start() {
         }
     }).forget();
 
+    // TODO calculate degree based on position
+    let control_state3 = control_state.clone();
+    let center_x = canvas.width() / 2;
+    let center_y = canvas.height() / 2;
+    EventListener::new(&document, "mousemove", move |event| {
+        let event: &MouseEvent = event.dyn_ref().unwrap_throw();
+        let mut state = control_state3.lock_mut();
+        state.cursor = (event.client_x() - center_x as i32, event.client_y() - center_y as i32);
+        let js1: JsValue = state.cursor.0.into();
+        let js2: JsValue = state.cursor.1.into();
+        web_sys::console::log_2(&js1, &js2);
+    }).forget();
+
     let mut name_stream = name_state.signal().to_stream();
     name_stream.next().await;
     name_stream.next().await;
@@ -207,7 +209,7 @@ pub async fn start() {
             futures::future::ready(state)
         });
     while let Some(state) = stream.next().await {
-        ws_sender.send(WsMessage::Binary(Operation::Update(state.dir()).serialize())).await;
+        ws_sender.send(WsMessage::Binary(Operation::Update(state.state()).serialize())).await;
     }
 }
 
@@ -218,16 +220,19 @@ trait Render {
 impl Render for RenderState {
     fn render(&self, ctx: &mut web_sys::CanvasRenderingContext2d) {
         ctx.clear_rect(0.0, 0.0, ctx.canvas().unwrap().width().into(), ctx.canvas().unwrap().height().into());
-        for (name, pos) in self.positions.iter() {
+        for (name, pos, ori) in self.positions.iter() {
             ctx.begin_path();
-            // Draw a circle.
+            // Render circle.
             ctx.set_fill_style(&JsValue::from_str("#13579B"));
-            ctx.arc(pos.x.into(), pos.y.into(), 50.0, 0.0, f64::consts::PI * 2.0)
+            ctx.arc(pos.x.into(), pos.y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
                .unwrap();
             ctx.stroke();
             ctx.fill();
-            // Render texts.
+            // Render small circle.
             ctx.set_fill_style(&JsValue::from_str("#000000"));
+            ctx.arc((pos.x + 20.0 * ori.cos()).into(), (pos.y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
+            ctx.stroke();
+            // Render texts.
             ctx.set_font("30px Comic Sans MS");
             ctx.fill_text(name, (pos.x + 30.0).into(), (pos.y - 15.0).into()).unwrap();
         }
