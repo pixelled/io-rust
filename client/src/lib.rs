@@ -227,17 +227,13 @@ impl Render for RenderState {
         self.positions.iter().for_each(|(name, pos, ori)| {
             let x = pos.x - offset_x;
             let y = pos.y - offset_y;
-            let color = SolidSource {
-                r: 19,
-                g: 87,
-                b: 155,
-                a: 1,
-            };
+            // Color format: ARGB
+            let color = SolidSource::from_unpremultiplied_argb(0x70, 0x00, 0x00, 0x00);
 
             // Render player body.
             let mut pb = PathBuilder::new();
-            // pb.move_to(x, y);
-            pb.arc(x, y, 30.0, 0.0, f32::consts::PI * 2.0);
+            pb.move_to(x.into(), y.into());
+            pb.arc(x.into(), y.into(), 30.0, 0.0, f32::consts::PI * 2.0);
             pb.close();
             let path = pb.finish();
             dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
