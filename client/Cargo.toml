@@ -1,7 +1,7 @@
 [package]
 name = "game-client"
 version = "0.1.0"
-authors = ["Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
+authors = ["Sicheng Pan <sicheng0129@gmail.com>", "Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
 edition = "2018"
 
 [lib]
@@ -17,6 +17,7 @@ futures-signals = "0.3"
 pin-project = "1.0"
 console_error_panic_hook = "0.1"
 gloo = "0.2"
+raqote = "0.8.0"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -25,6 +26,7 @@ features = [
     "CssStyleDeclaration",
     "Document",
     "Element",
+    "ImageData",
     "KeyboardEvent",
     "MouseEvent",
     "HtmlCanvasElement",

@@ -1,7 +1,6 @@
-use std::f64;
+use std::{f32, f64};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{Clamped, JsCast, JsValue};
 use game_shared::{RenderState, Operation, PlayerState};
 use ws_stream_wasm::{WsStream, WsMeta, WsMessage};
 use futures::{stream, StreamExt, SinkExt, Stream};
@@ -14,8 +13,9 @@ use futures::stream::select;
 use pin_project::pin_project;
 use gloo::events::EventListener;
 use futures_signals::signal::{Mutable, SignalExt};
-use web_sys::{KeyboardEvent, MouseEvent};
+use web_sys::{KeyboardEvent, MouseEvent, ImageData};
 use std::fmt::Debug;
+use raqote::*;
 
 fn with_latest<S, A>(src: S, acc: A) -> WithLatest<S, A> where S: Stream, A: Stream {
     WithLatest { src, acc, val: None }
@@ -222,23 +222,53 @@ impl Render for RenderState {
         ctx.clear_rect(0.0, 0.0, can_width.into(), can_height.into());
         let offset_x = self.self_pos.x - can_width / 2.0;
         let offset_y = self.self_pos.y - can_height / 2.0;
+        
+        let mut dt = DrawTarget::new(can_width as i32, can_height as i32);
         self.positions.iter().for_each(|(name, pos, ori)| {
             let x = pos.x - offset_x;
             let y = pos.y - offset_y;
-            ctx.begin_path();
-            // Render circle.
-            ctx.set_fill_style(&JsValue::from_str("#13579B"));
-            ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
-               .unwrap();
-            ctx.stroke();
-            ctx.fill();
-            // Render small circle.
-            ctx.set_fill_style(&JsValue::from_str("#000000"));
-            ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
-            ctx.stroke();
-            // Render texts.
-            ctx.set_font("30px Comic Sans MS");
-            ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
+            let color = SolidSource {
+                r: 19,
+                g: 87,
+                b: 155,
+                a: 1,
+            };
+
+            // Render player body.
+            let mut pb = PathBuilder::new();
+            // pb.move_to(x, y);
+            pb.arc(x, y, 30.0, 0.0, f32::consts::PI * 2.0);
+            pb.close();
+            let path = pb.finish();
+            dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
+
+            // ctx.begin_path();
+            // // Render circle.
+            // ctx.set_fill_style(&JsValue::from_str("#13579B"));
+            // ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
+            //    .unwrap();
+            // ctx.stroke();
+            // ctx.fill();
+            // // Render small circle.
+            // ctx.set_fill_style(&JsValue::from_str("#000000"));
+            // ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
+            // ctx.stroke();
+            // // Render texts.
+            // ctx.set_font("30px Comic Sans MS");
+            // ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
         });
+
+        let mut pixel_data = dt.get_data_u8_mut();
+
+        // Convert raw pixel_data to ImageData object
+        let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(&mut pixel_data),
+            can_width as u32,
+            can_height as u32,
+        );
+
+        // Place image_data onto canvas
+        ctx.put_image_data(&image_data.unwrap(), 0.0, 0.0);
+        
     }
 }
