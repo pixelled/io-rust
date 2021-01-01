@@ -2,6 +2,10 @@ pub struct Player {
     pub name: String,
 }
 
+pub struct Shape {
+    pub id: i8,
+}
+
 pub use game_shared::Position;
 
 pub use game_shared::Ori;

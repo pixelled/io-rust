@@ -1,5 +1,5 @@
 use crate::{TICK_TIME, PlayerView};
-use crate::component::{Position, Velocity, Acceleration, Player};
+use crate::component::*;
 use crate::event::{CreatePlayer, ChangeMovement, RemovePlayer};
 use bevy::app::{Events, EventReader};
 use bevy::ecs::{Query, Commands, ResMut, Local, Res, Command, World, Resources};
@@ -11,6 +11,16 @@ const MAP_WIDTH: f32 = 5000.0;
 const MAP_HEIGHT: f32 = 5000.0;
 const VIEW_X: f32 = 1000.0;
 const VIEW_Y: f32 = 600.0;
+
+pub fn setup(commands: &mut Commands) {
+    let mut rng = rand::thread_rng();
+    for _ in 0..1000 {
+        commands.spawn((
+            Shape { id: 0 },
+            Position { x: rng.gen_range(0.0..5000.0), y: rng.gen_range(0.0..5000.0)},
+        ));
+    }
+}
 
 pub fn create_player(
     commands: &mut Commands,
@@ -79,14 +89,23 @@ pub fn next_frame(mut game_state: ResMut<GameServer>, mut query: Query<(&mut Pos
     }
 }
 
-pub fn extract_render_state(game_state: Res<GameServer>, query: Query<(bevy::ecs::Entity, &Player, &Position, &Ori)>) {
-    query.iter().for_each(|(entity, player, self_pos, ori)| {
+pub fn extract_render_state(
+    game_state: Res<GameServer>,
+    query: Query<(bevy::ecs::Entity, &Player, &Position, &Ori)>,
+    obj_query: Query<(&Shape, &Position)>,
+) {
+    for (entity, player, self_pos, ori) in query.iter() {
         let positions: Vec<(String, Position, f32)> = query.iter().filter(|(_, _, pos, _)| {
             (self_pos.x - pos.x).abs() < VIEW_X && (self_pos.y - pos.y).abs() < VIEW_Y
         }).map(|(_, player, pos, ori)| {
             (player.name.clone(), pos.clone(), ori.deg)
         }).collect();
-        let state = RenderState { time: game_state.up_time, self_pos: self_pos.clone(), positions };
+        let static_pos: Vec<Position> = obj_query.iter().filter(|(_, pos)| {
+            (self_pos.x - pos.x).abs() < VIEW_X && (self_pos.y - pos.y).abs() < VIEW_Y
+        }).map(|(_, pos)| {
+            pos.clone()
+        }).collect();
+        let state = RenderState { time: game_state.up_time, self_pos: self_pos.clone(), positions, static_pos};
         game_state.sessions.get(&entity).expect("Left player still alive").do_send(PlayerView(state.clone()));
-    });
+    }
 }

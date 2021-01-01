@@ -227,44 +227,64 @@ impl Render for RenderState {
         self.positions.iter().for_each(|(name, pos, ori)| {
             let x = pos.x - offset_x;
             let y = pos.y - offset_y;
-            // Color format: ARGB
-            let color = SolidSource::from_unpremultiplied_argb(0x70, 0x00, 0x00, 0x00);
+            // // Color format: ARGB
+            // let color = SolidSource::from_unpremultiplied_argb(0x70, 0x00, 0x00, 0x00);
+            //
+            // // Render player body.
+            // let mut pb = PathBuilder::new();
+            // pb.move_to(x.into(), y.into());
+            // pb.arc(x.into(), y.into(), 30.0, 0.0, f32::consts::PI * 2.0);
+            // pb.close();
+            // let path = pb.finish();
+            // dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
 
-            // Render player body.
-            let mut pb = PathBuilder::new();
-            pb.move_to(x.into(), y.into());
-            pb.arc(x.into(), y.into(), 30.0, 0.0, f32::consts::PI * 2.0);
-            pb.close();
-            let path = pb.finish();
-            dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
-
-            // ctx.begin_path();
-            // // Render circle.
-            // ctx.set_fill_style(&JsValue::from_str("#13579B"));
-            // ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
-            //    .unwrap();
-            // ctx.stroke();
-            // ctx.fill();
-            // // Render small circle.
-            // ctx.set_fill_style(&JsValue::from_str("#000000"));
-            // ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
-            // ctx.stroke();
-            // // Render texts.
-            // ctx.set_font("30px Comic Sans MS");
-            // ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
+            ctx.begin_path();
+            // Render circle.
+            ctx.set_fill_style(&JsValue::from_str("#13579B"));
+            ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
+               .unwrap();
+            ctx.stroke();
+            ctx.fill();
+            // Render small circle.
+            ctx.set_fill_style(&JsValue::from_str("#000000"));
+            ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
+            ctx.stroke();
+            // Render texts.
+            ctx.set_font("30px Comic Sans MS");
+            ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
         });
 
-        let mut pixel_data = dt.get_data_u8_mut();
+        self.static_pos.iter().for_each(|pos| {
+            let x = pos.x - offset_x;
+            let y = pos.y - offset_y;
+            ctx.begin_path();
+            ctx.arc(x.into(), y.into(), 20.0, 0.0, f64::consts::PI * 2.0)
+                .unwrap();
+            ctx.fill();
+            ctx.close_path();
 
-        // Convert raw pixel_data to ImageData object
-        let image_data = ImageData::new_with_u8_clamped_array_and_sh(
-            Clamped(&mut pixel_data),
-            can_width as u32,
-            can_height as u32,
-        );
+            // // Color format: ARGB
+            // let color = SolidSource::from_unpremultiplied_argb(0x70, 0xbc, 0x34, 0x2a);
+            //
+            // // Render player body.
+            // let mut pb = PathBuilder::new();
+            // pb.move_to(x.into(), y.into());
+            // pb.arc(x.into(), y.into(), 20.0, 0.0, f32::consts::PI * 2.0);
+            // pb.close();
+            // let path = pb.finish();
+            // dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
+        });
 
-        // Place image_data onto canvas
-        ctx.put_image_data(&image_data.unwrap(), 0.0, 0.0);
-        
+        // let mut pixel_data = dt.get_data_u8_mut();
+        //
+        // // Convert raw pixel_data to ImageData object
+        // let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+        //     Clamped(&mut pixel_data),
+        //     can_width as u32,
+        //     can_height as u32,
+        // );
+        //
+        // // Place image_data onto canvas
+        // ctx.put_image_data(&image_data.unwrap(), 0.0, 0.0);
     }
 }

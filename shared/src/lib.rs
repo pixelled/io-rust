@@ -49,6 +49,7 @@ pub struct RenderState {
     pub time: Duration,
     pub self_pos: Position,
     pub positions: Vec<(String, Position, f32)>,
+    pub static_pos: Vec<Position>,
 }
 
 impl RenderState {
@@ -57,6 +58,7 @@ impl RenderState {
             time: Duration::from_nanos(0),
             self_pos: Position { x: 0.0, y: 0.0 },
             positions: Vec::new(),
+            static_pos: Vec::new(),
         }
     }
 

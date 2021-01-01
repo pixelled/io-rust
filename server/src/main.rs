@@ -116,7 +116,7 @@ async fn main() {
 
     futures::future::join(async {
         bevy::prelude::App::build()
-            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 60.0)))
+            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 100.0)))
             .add_plugins(MinimalPlugins)
             .add_event::<CreatePlayer>()
             .add_event::<ChangeMovement>()
@@ -125,6 +125,7 @@ async fn main() {
             .add_resource(EventListener(r1))
             .add_resource(EventListener(r2))
             .add_resource(EventListener(r3))
+            .add_startup_system(system::setup.system())
             .add_system(event::trigger_events.system())
             .add_system(system::remove_player.system())
             .add_system(system::create_player.system())
