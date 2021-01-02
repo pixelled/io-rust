@@ -15,7 +15,9 @@ use gloo::events::EventListener;
 use futures_signals::signal::{Mutable, SignalExt};
 use web_sys::{KeyboardEvent, MouseEvent, ImageData};
 use std::fmt::Debug;
-use raqote::*;
+use piet::{Color, RenderContext, TextAlignment, Text, TextLayout, TextLayoutBuilder, FontFamily, TextAttribute};
+use piet::kurbo::{Circle, Rect};
+use piet_web::{WebRenderContext, WebTextLayout};
 
 fn with_latest<S, A>(src: S, acc: A) -> WithLatest<S, A> where S: Stream, A: Stream {
     WithLatest { src, acc, val: None }
@@ -194,6 +196,11 @@ pub async fn start() {
     name_stream.next().await;
     name_input.style().set_property("display","none");
 
+    let window = web_sys::window().expect("Window doesn't exist.");
+    let can_width = canvas.width() as f32;
+    let can_height = canvas.height() as f32;
+    let mut piet_ctx = WebRenderContext::new(context, window);
+
     let (mut ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None).await.expect("Websocket connection failed.");
     ws_stream.send(WsMessage::Binary(Operation::Join(name_input.value()).serialize())).await;
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -201,7 +208,7 @@ pub async fn start() {
     let mut stream = with_latest(ws_receiver, control_state_signal.to_stream())
         .filter_map(move |(message, state)| {
             if let WsMessage::Binary(data) = message {
-                RenderState::deserialize(data.as_slice()).render(&mut context);
+                RenderState::deserialize(data.as_slice()).render(&mut piet_ctx, can_width, can_height);
             };
             futures::future::ready(state)
         });
@@ -211,80 +218,43 @@ pub async fn start() {
 }
 
 trait Render {
-    fn render(&self, ctx: &mut web_sys::CanvasRenderingContext2d);
+    fn render(&mut self, ctx: &mut WebRenderContext, w: f32, h: f32);
 }
 
 impl Render for RenderState {
-    fn render(&self, ctx: &mut web_sys::CanvasRenderingContext2d) {
-        let canvas = ctx.canvas().unwrap();
-        let can_width = canvas.width() as f32;
-        let can_height = canvas.height() as f32;
-        ctx.clear_rect(0.0, 0.0, can_width.into(), can_height.into());
+    fn render(&mut self, piet_ctx: &mut WebRenderContext, can_width: f32, can_height: f32) {
         let offset_x = self.self_pos.x - can_width / 2.0;
         let offset_y = self.self_pos.y - can_height / 2.0;
-        
-        let mut dt = DrawTarget::new(can_width as i32, can_height as i32);
-        self.positions.iter().for_each(|(name, pos, ori)| {
-            let x = pos.x - offset_x;
-            let y = pos.y - offset_y;
-            // // Color format: ARGB
-            // let color = SolidSource::from_unpremultiplied_argb(0x70, 0x00, 0x00, 0x00);
-            //
-            // // Render player body.
-            // let mut pb = PathBuilder::new();
-            // pb.move_to(x.into(), y.into());
-            // pb.arc(x.into(), y.into(), 30.0, 0.0, f32::consts::PI * 2.0);
-            // pb.close();
-            // let path = pb.finish();
-            // dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
 
-            ctx.begin_path();
-            // Render circle.
-            ctx.set_fill_style(&JsValue::from_str("#13579B"));
-            ctx.arc(x.into(), y.into(), 30.0, 0.0, f64::consts::PI * 2.0)
-               .unwrap();
-            ctx.stroke();
-            ctx.fill();
-            // Render small circle.
-            ctx.set_fill_style(&JsValue::from_str("#000000"));
-            ctx.arc((x + 20.0 * ori.cos()).into(), (y + 20.0 * ori.sin()).into(), 20.0, 0.0, f64::consts::PI * 2.0);
-            ctx.stroke();
-            // Render texts.
-            ctx.set_font("30px Comic Sans MS");
-            ctx.fill_text(name, (x + 30.0).into(), (y - 15.0).into()).unwrap();
-        });
+        piet_ctx.clear(Color::rgb8(36, 39, 44));
 
         self.static_pos.iter().for_each(|pos| {
-            let x = pos.x - offset_x;
-            let y = pos.y - offset_y;
-            ctx.begin_path();
-            ctx.arc(x.into(), y.into(), 20.0, 0.0, f64::consts::PI * 2.0)
-                .unwrap();
-            ctx.fill();
-            ctx.close_path();
-
-            // // Color format: ARGB
-            // let color = SolidSource::from_unpremultiplied_argb(0x70, 0xbc, 0x34, 0x2a);
-            //
-            // // Render player body.
-            // let mut pb = PathBuilder::new();
-            // pb.move_to(x.into(), y.into());
-            // pb.arc(x.into(), y.into(), 20.0, 0.0, f32::consts::PI * 2.0);
-            // pb.close();
-            // let path = pb.finish();
-            // dt.fill(&path, &Source::Solid(color), &DrawOptions::new());
+            let x = (pos.x - offset_x) as f64;
+            let y = (pos.y - offset_y) as f64;
+            let pt = (x, y);
+            let shape = Circle::new(pt, 20.0);
+            let brush = piet_ctx.solid_brush(Color::grey(0.5));
+            piet_ctx.fill(&shape, &brush);
         });
 
-        // let mut pixel_data = dt.get_data_u8_mut();
-        //
-        // // Convert raw pixel_data to ImageData object
-        // let image_data = ImageData::new_with_u8_clamped_array_and_sh(
-        //     Clamped(&mut pixel_data),
-        //     can_width as u32,
-        //     can_height as u32,
-        // );
-        //
-        // // Place image_data onto canvas
-        // ctx.put_image_data(&image_data.unwrap(), 0.0, 0.0);
+        for (name, pos, ori) in self.positions.drain(..) {
+            let x = (pos.x - offset_x) as f64;
+            let y = (pos.y - offset_y) as f64;
+
+            let pt = (x, y);
+            let shape = Circle::new(pt, 30.0);
+            let brush = piet_ctx.solid_brush(Color::SILVER);
+            piet_ctx.fill(&shape, &brush);
+            let brush1 = piet_ctx.solid_brush(Color::grey(0.9));
+            piet_ctx.stroke(&shape, &brush1, 5.0);
+
+            let layout = piet_ctx.text().new_text_layout(name)
+                .default_attribute(TextAttribute::FontSize(24.0))
+                .default_attribute(TextAttribute::TextColor(Color::grey(0.9)))
+                .build().unwrap();
+            piet_ctx.draw_text(&layout, (x - layout.size().width / 2.0, y - 80.0));
+        }
+
+        piet_ctx.finish().unwrap();
     }
 }

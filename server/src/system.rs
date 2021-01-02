@@ -14,7 +14,7 @@ const VIEW_Y: f32 = 600.0;
 
 pub fn setup(commands: &mut Commands) {
     let mut rng = rand::thread_rng();
-    for _ in 0..1000 {
+    for _ in 0..10000 {
         commands.spawn((
             Shape { id: 0 },
             Position { x: rng.gen_range(0.0..5000.0), y: rng.gen_range(0.0..5000.0)},
