@@ -1,5 +1,4 @@
 use bevy::ecs::{Entity, ResMut};
-use crate::component::Acceleration;
 use futures::channel::oneshot::Sender;
 use actix::Addr;
 use futures::channel::mpsc::UnboundedReceiver;

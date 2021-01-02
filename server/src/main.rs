@@ -11,6 +11,7 @@ use bevy::ecs::{IntoSystem, Entity};
 use bevy::MinimalPlugins;
 use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer, EventListener};
 use bevy::app::ScheduleRunnerSettings;
+use bevy_rapier2d::physics::RapierPhysicsPlugin;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -118,9 +119,10 @@ async fn main() {
         bevy::prelude::App::build()
             .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 100.0)))
             .add_plugins(MinimalPlugins)
+            .add_plugin(RapierPhysicsPlugin)
             .add_event::<CreatePlayer>()
-            .add_event::<ChangeMovement>()
             .add_event::<RemovePlayer>()
+            .add_event::<ChangeMovement>()
             .add_resource(GameServer::new())
             .add_resource(EventListener(r1))
             .add_resource(EventListener(r2))

@@ -1,7 +1,7 @@
 [package]
 name = "game-server"
 version = "0.1.0"
-authors = ["Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
+authors = ["Sicheng Pan <sicheng0129@gmail.com>", "Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -15,3 +15,4 @@ actix-files = "0.4"
 futures = "0.3"
 bevy = "0.4"
 rand = "0.8"
+bevy_rapier2d = "0.7"

@@ -7,19 +7,20 @@ use game_shared::{RenderState, Ori};
 use crate::server::GameServer;
 use rand::Rng;
 
-const MAP_WIDTH: f32 = 5000.0;
-const MAP_HEIGHT: f32 = 5000.0;
-const VIEW_X: f32 = 1000.0;
-const VIEW_Y: f32 = 600.0;
+use bevy_rapier2d::na::Point2;
+use bevy_rapier2d::physics::{JointBuilderComponent, RapierPhysicsPlugin, RigidBodyHandleComponent, ColliderHandleComponent};
+use bevy_rapier2d::rapier::dynamics::{BallJoint, RigidBodyBuilder, RigidBodySet};
+use bevy_rapier2d::rapier::geometry::ColliderBuilder;
+
+const MAP_WIDTH: f32 = 16000.0;
+const MAP_HEIGHT: f32 = 9000.0;
+const VIEW_X: f32 = 2080.0;
+const VIEW_Y: f32 = 1170.0;
+const INIT_MASS: f32 = 1.0;
+const INIT_RADIUS: f32 = 20.0;
 
 pub fn setup(commands: &mut Commands) {
-    let mut rng = rand::thread_rng();
-    for _ in 0..10000 {
-        commands.spawn((
-            Shape { id: 0 },
-            Position { x: rng.gen_range(0.0..5000.0), y: rng.gen_range(0.0..5000.0)},
-        ));
-    }
+
 }
 
 pub fn create_player(
@@ -29,12 +30,18 @@ pub fn create_player(
 ) {
     let mut rng = rand::thread_rng();
     for event in events.drain() {
+        let x = rng.gen_range(500.0..1500.0);
+        let y = rng.gen_range(500.0..1500.0);
+        let body = RigidBodyBuilder::new_dynamic().translation(x, y);
+        body.mass(INIT_MASS, true);
+        let body_collider = ColliderBuilder::ball(INIT_RADIUS);
         commands.spawn((
             Player { name: event.name.clone() },
-            Position { x: rng.gen_range(500.0..1500.0), y: rng.gen_range(500.0..1500.0) },
+            body,
+            body_collider,
+            Position {x, y},
             Ori { deg: 0.0 },
-            Velocity { x: 0.0, y: 0.0 },
-            Acceleration { x: 0.0, y: 0.0 },
+            Force { x: 0.0, y: 0.0 },
         ));
         let entity = commands.current_entity().unwrap();
         game_state.sessions.insert(entity, event.session.clone());
@@ -45,10 +52,10 @@ pub fn create_player(
 
 impl Command for ChangeMovement {
     fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
-        let mut acc = world.get_mut::<Acceleration>(self.player).expect("No component found.");
-        let (ay, ax) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
-        acc.x = ax * 1000.0;
-        acc.y = ay * 1000.0;
+        let mut force = world.get_mut::<Force>(self.player).expect("No component found.");
+        let (fy, fx) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
+        force.x = fx * 1000.0;
+        force.y = fy * 1000.0;
         let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
         ori.deg = self.state.ori;
     }
@@ -76,16 +83,19 @@ pub fn remove_player(
     }
 }
 
-pub fn next_frame(mut game_state: ResMut<GameServer>, mut query: Query<(&mut Position, &mut Velocity, &Acceleration)>) {
+pub fn next_frame(mut game_state: ResMut<GameServer>,
+                  mut rigid_body_set: ResMut<RigidBodySet>,
+                  mut player_query: Query<(&Player,
+                                    &RigidBodyHandleComponent,
+                                    &mut Position,
+                                    &mut Force)>) {
     game_state.up_time += TICK_TIME;
     let dt = TICK_TIME.as_secs_f32();
-    for (mut pos, mut vel, acc) in query.iter_mut() {
-        pos.x += dt * vel.x;
-        pos.x = pos.x.min(MAP_WIDTH).max(0.0);
-        pos.y += dt * vel.y;
-        pos.y = pos.y.min(MAP_HEIGHT).max(0.0);
-        vel.x += dt * (acc.x - 0.3 * vel.x);
-        vel.y += dt * (acc.y - 0.3 * vel.y);
+    for (_, rbh, mut pos, mut force) in player_query.iter_mut() {
+        let mut body = rigid_body_set.get_mut(rbh.handle()).unwrap();
+        body.apply_force(force, true);
+        pos.x = body.position().translation.vector.x();
+        pos.y = body.position().translation.vector.y();
     }
 }
 

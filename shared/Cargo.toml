@@ -1,7 +1,7 @@
 [package]
 name = "game-shared"
 version = "0.1.0"
-authors = ["Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
+authors = ["Sicheng Pan <sicheng0129@gmail.com>", "Qingyuan Liu <pixelledliu@gmail.com>", "Shuxian Wang <wsx@udscbt.io>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
