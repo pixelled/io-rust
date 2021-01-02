@@ -16,7 +16,7 @@ use futures_signals::signal::{Mutable, SignalExt};
 use web_sys::{KeyboardEvent, MouseEvent, ImageData};
 use std::fmt::Debug;
 use piet::{Color, RenderContext, TextAlignment, Text, TextLayout, TextLayoutBuilder, FontFamily, TextAttribute};
-use piet::kurbo::{Circle, Rect};
+use piet::kurbo::{Circle, Rect, CircleSegment};
 use piet_web::{WebRenderContext, WebTextLayout};
 
 fn with_latest<S, A>(src: S, acc: A) -> WithLatest<S, A> where S: Stream, A: Stream {
@@ -241,6 +241,7 @@ impl Render for RenderState {
             let x = (pos.x - offset_x) as f64;
             let y = (pos.y - offset_y) as f64;
 
+            // Render body.
             let pt = (x, y);
             let shape = Circle::new(pt, 30.0);
             let brush = piet_ctx.solid_brush(Color::SILVER);
@@ -248,6 +249,11 @@ impl Render for RenderState {
             let brush1 = piet_ctx.solid_brush(Color::grey(0.9));
             piet_ctx.stroke(&shape, &brush1, 5.0);
 
+            // Render shield.
+            let shape = CircleSegment::new((x, y), 45.0, 40.0, ori as f64 - 0.85, 1.7);
+            piet_ctx.stroke(&shape, &brush, 5.0);
+
+            // Render text.
             let layout = piet_ctx.text().new_text_layout(name)
                 .default_attribute(TextAttribute::FontSize(24.0))
                 .default_attribute(TextAttribute::TextColor(Color::grey(0.9)))
