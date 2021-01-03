@@ -237,6 +237,15 @@ impl Render for RenderState {
             piet_ctx.fill(&shape, &brush);
         });
 
+        self.celestial_pos.iter().for_each(|pos| {
+            let x = (pos.x - offset_x) as f64;
+            let y = (pos.y - offset_y) as f64;
+            let pt = (x, y);
+            let shape = Circle::new(pt, 100.0);
+            let brush = piet_ctx.solid_brush(Color::grey(1.0));
+            piet_ctx.fill(&shape, &brush);
+        });
+
         for (name, pos, ori) in self.positions.drain(..) {
             let x = (pos.x - offset_x) as f64;
             let y = (pos.y - offset_y) as f64;

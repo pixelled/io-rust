@@ -117,7 +117,7 @@ async fn main() {
 
     futures::future::join(async {
         bevy::prelude::App::build()
-            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(1.0 / 100.0)))
+            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(14)))
             .add_plugins(MinimalPlugins)
             .add_plugin(RapierPhysicsPlugin)
             .add_event::<CreatePlayer>()
@@ -133,7 +133,6 @@ async fn main() {
             .add_system(system::create_player.system())
             .add_system(system::change_movement.system())
             .add_system(system::next_frame.system())
-            .add_system(system::next_frame_obj.system())
             .add_system(system::extract_render_state.system())
             .run();
     },

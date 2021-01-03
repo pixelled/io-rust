@@ -50,6 +50,7 @@ pub struct RenderState {
     pub self_pos: Position,
     pub positions: Vec<(String, Position, f32)>,
     pub static_pos: Vec<Position>,
+    pub celestial_pos: Vec<Position>,
 }
 
 impl RenderState {
@@ -59,6 +60,7 @@ impl RenderState {
             self_pos: Position { x: 0.0, y: 0.0 },
             positions: Vec::new(),
             static_pos: Vec::new(),
+            celestial_pos: Vec::new(),
         }
     }
 
