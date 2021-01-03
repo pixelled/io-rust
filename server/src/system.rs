@@ -20,6 +20,7 @@ const VIEW_X: f32 = 2080.0;
 const VIEW_Y: f32 = 1170.0;
 const INIT_MASS: f32 = 1.0;
 const INIT_RADIUS: f32 = 20.0;
+const INIT_RESTITUTION: f32 = 1.0;
 
 pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfiguration>) {
     let mut rng = rand::thread_rng();
@@ -28,17 +29,17 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
     configuration.gravity = Vector2::new(0.0, 0.0);
 
     // Boundaries.
-    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0))));
-    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT))));
-    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT))));
-    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT))));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0)).restitution(INIT_RESTITUTION)));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT)).restitution(INIT_RESTITUTION)));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION)));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION)));
 
     // Random stuffs.
     for _ in 0..100 {
         let x = rng.gen_range(500.0..1500.0);
         let y = rng.gen_range(500.0..1500.0);
         let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, true);
-        let body_collider = ColliderBuilder::ball(INIT_RADIUS);
+        let body_collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
         commands.spawn((
             Shape { id: 0 },
             Position { x: rng.gen_range(0.0..5000.0), y: rng.gen_range(0.0..5000.0)},
@@ -58,7 +59,7 @@ pub fn create_player(
         let x = rng.gen_range(500.0..1500.0);
         let y = rng.gen_range(500.0..1500.0);
         let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, true);
-        let body_collider = ColliderBuilder::ball(INIT_RADIUS);
+        let body_collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
         commands.spawn((
             Player { name: event.name.clone() },
             Position {x, y},
