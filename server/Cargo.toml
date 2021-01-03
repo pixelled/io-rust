@@ -15,4 +15,4 @@ actix-files = "0.4"
 futures = "0.3"
 bevy = "0.4"
 rand = "0.8"
-bevy_rapier2d = "0.7"
+bevy_rapier2d = { version = "0.7", features = [ "simd-stable", "parallel" ] }

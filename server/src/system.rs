@@ -8,10 +8,11 @@ use crate::server::GameServer;
 use rand::Rng;
 
 use bevy_rapier2d::na::Point2;
-use bevy_rapier2d::physics::{JointBuilderComponent, RapierPhysicsPlugin, RigidBodyHandleComponent, ColliderHandleComponent};
+use bevy_rapier2d::physics::{JointBuilderComponent, RapierPhysicsPlugin, RigidBodyHandleComponent, ColliderHandleComponent, RapierConfiguration};
 use bevy_rapier2d::rapier::dynamics::{BallJoint, RigidBodyBuilder, RigidBodySet};
 use bevy_rapier2d::rapier::geometry::ColliderBuilder;
 use bevy_rapier2d::rapier::ncollide::na::{Vector, Vector2};
+use bevy_rapier2d::rapier::pipeline::PhysicsPipeline;
 
 const MAP_WIDTH: f32 = 16000.0;
 const MAP_HEIGHT: f32 = 9000.0;
@@ -20,8 +21,19 @@ const VIEW_Y: f32 = 1170.0;
 const INIT_MASS: f32 = 1.0;
 const INIT_RADIUS: f32 = 20.0;
 
-pub fn setup(commands: &mut Commands) {
+pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfiguration>) {
     let mut rng = rand::thread_rng();
+
+    // Disable gravity.
+    configuration.gravity = Vector2::new(0.0, 0.0);
+
+    // Boundaries.
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0))));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT))));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT))));
+    commands.spawn((RigidBodyBuilder::new_static(), ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT))));
+
+    // Random stuffs.
     for _ in 0..100 {
         let x = rng.gen_range(500.0..1500.0);
         let y = rng.gen_range(500.0..1500.0);
@@ -49,11 +61,11 @@ pub fn create_player(
         let body_collider = ColliderBuilder::ball(INIT_RADIUS);
         commands.spawn((
             Player { name: event.name.clone() },
-            body,
-            body_collider,
             Position {x, y},
             Ori { deg: 0.0 },
             Force { x: 0.0, y: 0.0 },
+            body,
+            body_collider,
         ));
         let entity = commands.current_entity().unwrap();
         game_state.sessions.insert(entity, event.session.clone());
