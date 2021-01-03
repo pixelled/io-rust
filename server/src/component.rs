@@ -14,6 +14,7 @@ pub use game_shared::Position;
 
 pub use game_shared::Ori;
 
+#[derive(Debug)]
 pub struct Force {
     pub(crate) x: f32,
     pub(crate) y: f32,

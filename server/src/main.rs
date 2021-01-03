@@ -133,6 +133,7 @@ async fn main() {
             .add_system(system::create_player.system())
             .add_system(system::change_movement.system())
             .add_system(system::next_frame.system())
+            .add_system(system::next_frame_obj.system())
             .add_system(system::extract_render_state.system())
             .run();
     },

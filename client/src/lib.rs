@@ -243,7 +243,7 @@ impl Render for RenderState {
 
             // Render body.
             let pt = (x, y);
-            let shape = Circle::new(pt, 30.0);
+            let shape = Circle::new(pt, 20.0);
             let brush = piet_ctx.solid_brush(Color::SILVER);
             piet_ctx.fill(&shape, &brush);
             let brush1 = piet_ctx.solid_brush(Color::grey(0.9));
