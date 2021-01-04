@@ -5,22 +5,22 @@ use actix_files as fs;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-use game_shared::{RenderState, Operation};
-use crate::server::{GameServer, GameProxy};
-use bevy::ecs::{IntoSystem, Entity};
-use bevy::MinimalPlugins;
-use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer, EventListener};
+use crate::event::{ChangeMovement, CreatePlayer, EventListener, RemovePlayer};
+use crate::server::{GameProxy, GameServer};
 use bevy::app::ScheduleRunnerSettings;
+use bevy::ecs::{Entity, IntoSystem};
+use bevy::MinimalPlugins;
 use bevy_rapier2d::physics::RapierPhysicsPlugin;
+use game_shared::{Operation, RenderState};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const TICK_TIME: Duration = Duration::from_millis(16);
 
 mod component;
-mod system;
 mod event;
 mod server;
+mod system;
 
 pub struct WsSession {
     hb: Instant,
@@ -51,11 +51,7 @@ impl Handler<PlayerView> for WsSession {
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
-    fn handle(
-        &mut self,
-        msg: Result<ws::Message, ws::ProtocolError>,
-        ctx: &mut Self::Context,
-    ) {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Pong(_)) => {
                 self.hb = Instant::now();
@@ -65,12 +61,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                     Operation::Join(name) => {
                         let (sender, receiver) = futures::channel::oneshot::channel();
                         self.proxy.create_player(name, sender, ctx.address());
-                        receiver.into_actor(self).then(|e, act, _ctx| {
-                            act.player_entity = Some(e.unwrap());
-                            fut::ready(())
-                        }).wait(ctx);
+                        receiver
+                            .into_actor(self)
+                            .then(|e, act, _ctx| {
+                                act.player_entity = Some(e.unwrap());
+                                fut::ready(())
+                            })
+                            .wait(ctx);
                     }
-                    Operation::Update(player_state) => self.proxy.change_movement(self.player_entity, player_state),
+                    Operation::Update(player_state) => {
+                        self.proxy.change_movement(self.player_entity, player_state)
+                    }
                     // Unused
                     Operation::Leave => self.proxy.remove_player(self.player_entity),
                 }
@@ -99,12 +100,20 @@ impl WsSession {
     }
 }
 
-async fn index(req: HttpRequest, stream: web::Payload, data: web::Data<GameProxy>) -> Result<HttpResponse, Error> {
-    let res = ws::start(WsSession {
-        hb: Instant::now(),
-        player_entity: None,
-        proxy: data.as_ref().clone(),
-    }, &req, stream);
+async fn index(
+    req: HttpRequest,
+    stream: web::Payload,
+    data: web::Data<GameProxy>,
+) -> Result<HttpResponse, Error> {
+    let res = ws::start(
+        WsSession {
+            hb: Instant::now(),
+            player_entity: None,
+            proxy: data.as_ref().clone(),
+        },
+        &req,
+        stream,
+    );
     println!("{:?}", res);
     res
 }
@@ -115,34 +124,37 @@ async fn main() {
     let (s2, r2) = futures::channel::mpsc::unbounded();
     let (s3, r3) = futures::channel::mpsc::unbounded();
 
-    futures::future::join(async {
-        bevy::prelude::App::build()
-            .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(14)))
-            .add_plugins(MinimalPlugins)
-            .add_plugin(RapierPhysicsPlugin)
-            .add_event::<CreatePlayer>()
-            .add_event::<RemovePlayer>()
-            .add_event::<ChangeMovement>()
-            .add_resource(GameServer::new())
-            .add_resource(EventListener(r1))
-            .add_resource(EventListener(r2))
-            .add_resource(EventListener(r3))
-            .add_startup_system(system::setup.system())
-            .add_system(event::trigger_events.system())
-            .add_system(system::remove_player.system())
-            .add_system(system::create_player.system())
-            .add_system(system::change_movement.system())
-            .add_system(system::next_frame.system())
-            .add_system(system::extract_render_state.system())
-            .run();
-    },
-    HttpServer::new(move || {
-        App::new()
-            .data(GameProxy::new(s1.clone(), s2.clone(), s3.clone()))
-            .service(web::resource("/ws").route(web::get().to(index)))
-            .service(fs::Files::new("/", "dist/").index_file("index.html"))
-    })
-    .bind("127.0.0.1:8080").unwrap()
-    .run()
-    ).await;
+    futures::future::join(
+        async {
+            bevy::prelude::App::build()
+                .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(14)))
+                .add_plugins(MinimalPlugins)
+                .add_plugin(RapierPhysicsPlugin)
+                .add_event::<CreatePlayer>()
+                .add_event::<RemovePlayer>()
+                .add_event::<ChangeMovement>()
+                .add_resource(GameServer::new())
+                .add_resource(EventListener(r1))
+                .add_resource(EventListener(r2))
+                .add_resource(EventListener(r3))
+                .add_startup_system(system::setup.system())
+                .add_system(event::trigger_events.system())
+                .add_system(system::remove_player.system())
+                .add_system(system::create_player.system())
+                .add_system(system::change_movement.system())
+                .add_system(system::next_frame.system())
+                .add_system(system::extract_render_state.system())
+                .run();
+        },
+        HttpServer::new(move || {
+            App::new()
+                .data(GameProxy::new(s1.clone(), s2.clone(), s3.clone()))
+                .service(web::resource("/ws").route(web::get().to(index)))
+                .service(fs::Files::new("/", "dist/").index_file("index.html"))
+        })
+        .bind("127.0.0.1:8080")
+        .unwrap()
+        .run(),
+    )
+    .await;
 }

@@ -1,18 +1,14 @@
-use bevy::ecs::{Entity, ResMut};
-use futures::channel::oneshot::Sender;
-use actix::Addr;
-use futures::channel::mpsc::UnboundedReceiver;
-use bevy::app::Events;
 use crate::WsSession;
+use actix::Addr;
+use bevy::app::Events;
+use bevy::ecs::{Entity, ResMut};
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::oneshot::Sender;
 use game_shared::PlayerState;
 
 pub struct EventListener<T>(pub UnboundedReceiver<T>);
 
 impl<T> EventListener<T> {
-    pub fn new(receiver: UnboundedReceiver<T>) -> Self {
-        EventListener(receiver)
-    }
-
     pub fn next(&mut self) -> Option<T> {
         match self.0.try_next() {
             Ok(e) => e,
