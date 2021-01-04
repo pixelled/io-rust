@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+pub const MAP_WIDTH: f32 = 10000.0;
+pub const MAP_HEIGHT: f32 = 10000.0;
+
 #[derive(Serialize, Deserialize)]
 pub enum Operation {
     Join(String),
@@ -28,7 +31,7 @@ pub struct Ori {
     pub deg: f32,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerState {
     pub dir: Option<f32>,
     pub ori: f32,

@@ -1,21 +1,26 @@
-use futures::{SinkExt, Stream, StreamExt};
+use futures::stream::select;
+use futures::{stream, SinkExt, Stream, StreamExt};
 use futures_signals::signal::{Mutable, SignalExt};
-use game_shared::{Operation, PlayerState, RenderState};
+use game_shared::{Operation, PlayerState, RenderState, MAP_HEIGHT, MAP_WIDTH};
 use gloo::events::EventListener;
-use piet::kurbo::{Circle, CircleSegment};
-use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
-use piet_web::WebRenderContext;
+use piet::kurbo::{Circle, CircleSegment, Rect};
+use piet::{
+    Color, FontFamily, RenderContext, Text, TextAlignment, TextAttribute, TextLayout,
+    TextLayoutBuilder,
+};
+use piet_web::{WebRenderContext, WebTextLayout};
 use pin_project::pin_project;
-
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::pin::Pin;
-
+use std::rc::Rc;
 use std::task::{Context, Poll};
 use std::{f32, f64};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{KeyboardEvent, MouseEvent};
-use ws_stream_wasm::{WsMessage, WsMeta};
+use wasm_bindgen::{Clamped, JsCast, JsValue};
+use web_sys::{ImageData, KeyboardEvent, MouseEvent};
+use ws_stream_wasm::{WsMessage, WsMeta, WsStream};
 
 fn with_latest<S, A>(src: S, acc: A) -> WithLatest<S, A>
 where
@@ -148,7 +153,7 @@ pub async fn start() {
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .map_err(|_| ())
         .unwrap();
-    let context = canvas
+    let mut context = canvas
         .get_context("2d")
         .unwrap()
         .unwrap()
@@ -212,47 +217,64 @@ pub async fn start() {
     })
     .forget();
 
+    // Wait for username input.
     let mut name_stream = name_state.signal().to_stream();
     name_stream.next().await;
     name_stream.next().await;
-    name_input.style().set_property("display", "none").unwrap();
+    name_input.style().set_property("display", "none");
 
     let window = web_sys::window().expect("Window doesn't exist.");
     let can_width = canvas.width() as f32;
     let can_height = canvas.height() as f32;
     let mut piet_ctx = WebRenderContext::new(context, window);
 
-    let (_ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None)
+    let render_states = Rc::new(RefCell::new(Vec::new()));
+    let render_states1 = render_states.clone();
+
+    let (mut ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None)
         .await
         .expect("Websocket connection failed.");
     ws_stream
         .send(WsMessage::Binary(
             Operation::Join(name_input.value()).serialize(),
         ))
-        .await
-        .expect("Websocket send failed.");
-    let (mut ws_sender, ws_receiver) = ws_stream.split();
+        .await;
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let control_state_signal = control_state.signal();
     let mut stream = with_latest(ws_receiver, control_state_signal.to_stream()).filter_map(
         move |(message, state)| {
             if let WsMessage::Binary(data) = message {
-                RenderState::deserialize(data.as_slice()).render(
-                    &mut piet_ctx,
-                    can_width,
-                    can_height,
-                );
+                (*render_states1.borrow_mut()).push(RenderState::deserialize(data.as_slice()));
             };
             futures::future::ready(state)
         },
     );
+
+    let f = Rc::new(RefCell::new(None));
+    let g = f.clone();
+    *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        let s = (*render_states.borrow_mut()).len() as i32;
+        if let Some(mut render_state) = (*render_states.borrow_mut()).pop() {
+            render_state.render(&mut piet_ctx, can_width, can_height);
+        }
+        request_animation_frame(f.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut()>));
+    request_animation_frame(g.borrow().as_ref().unwrap());
+
     while let Some(state) = stream.next().await {
         ws_sender
             .send(WsMessage::Binary(
                 Operation::Update(state.state()).serialize(),
             ))
-            .await
-            .expect("Websocket send failed.");
+            .await;
     }
+}
+
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    web_sys::window()
+        .expect("no global `window` exists")
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("should register `requestAnimationFrame` OK");
 }
 
 trait Render {
@@ -279,7 +301,7 @@ impl Render for RenderState {
             let x = (pos.x - offset_x) as f64;
             let y = (pos.y - offset_y) as f64;
             let pt = (x, y);
-            let shape = Circle::new(pt, 100.0);
+            let shape = Circle::new(pt, 500.0);
             let brush = piet_ctx.solid_brush(Color::grey(1.0));
             piet_ctx.fill(&shape, &brush);
         });
@@ -310,6 +332,25 @@ impl Render for RenderState {
                 .unwrap();
             piet_ctx.draw_text(&layout, (x - layout.size().width / 2.0, y - 80.0));
         }
+
+        let map_len: f64 = 150.0;
+        let map_x = can_width as f64 - map_len - 50.0;
+        let map_y = can_height as f64 - map_len - 50.0;
+        let shape = Rect::new(map_x, map_y, map_x + map_len, map_y + map_len);
+        let brush = piet_ctx.solid_brush(Color::grey(0.8));
+        piet_ctx.fill(&shape, &brush);
+        let brush = piet_ctx.solid_brush(Color::grey(0.3));
+        piet_ctx.stroke(&shape, &brush, 7.0);
+
+        let shape = Circle::new(
+            (
+                map_x + (self.self_pos.x / MAP_WIDTH) as f64 * map_len,
+                map_y + (self.self_pos.y / MAP_HEIGHT) as f64 * map_len,
+            ),
+            2.0,
+        );
+        let brush = piet_ctx.solid_brush(Color::BLACK);
+        piet_ctx.fill(&shape, &brush);
 
         piet_ctx.finish().unwrap();
     }

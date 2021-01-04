@@ -69,9 +69,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                             })
                             .wait(ctx);
                     }
-                    Operation::Update(player_state) => {
-                        self.proxy.change_movement(self.player_entity, player_state)
-                    }
+                    Operation::Update(player_state) => self
+                        .proxy
+                        .change_movement(self.player_entity, dbg!(player_state)),
                     // Unused
                     Operation::Leave => self.proxy.remove_player(self.player_entity),
                 }

@@ -4,7 +4,7 @@ use crate::server::GameServer;
 use crate::{PlayerView, TICK_TIME};
 use bevy::app::{EventReader, Events};
 use bevy::ecs::{Command, Commands, Entity, Local, Or, Query, Res, ResMut, Resources, With, World};
-use game_shared::{Position, RenderState};
+use game_shared::{Position, RenderState, MAP_HEIGHT, MAP_WIDTH};
 use rand::Rng;
 
 use bevy_rapier2d::na::Point2;
@@ -15,15 +15,13 @@ use bevy_rapier2d::rapier::ncollide::na::Vector2;
 
 use bevy::prelude::Transform;
 
-const MAP_WIDTH: f32 = 16000.0;
-const MAP_HEIGHT: f32 = 9000.0;
 const VIEW_X: f32 = 2080.0;
 const VIEW_Y: f32 = 1170.0;
 const INIT_MASS: f32 = 1.0;
 const INIT_RADIUS: f32 = 20.0;
 const INIT_RESTITUTION: f32 = 1.0;
 const CELESTIAL_MASS: f32 = 20000000.0;
-const CELESTIAL_RADIUS: f32 = 100.0;
+const CELESTIAL_RADIUS: f32 = 500.0;
 const GRAVITY_CONST: f32 = 1.0;
 
 pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfiguration>) {
@@ -176,7 +174,7 @@ pub fn next_frame(
         rigid_body_set
             .get_mut(player_handle.handle())
             .unwrap()
-            .apply_force(force, true);
+            .apply_impulse(force * TICK_TIME.as_secs_f32(), true);
     }
 }
 
