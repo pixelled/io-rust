@@ -11,7 +11,7 @@ use bevy::app::ScheduleRunnerSettings;
 use bevy::ecs::{Entity, IntoSystem};
 use bevy::MinimalPlugins;
 use bevy_rapier2d::physics::RapierPhysicsPlugin;
-use game_shared::{Operation, RenderState};
+use game_shared::{Operation, ViewSnapshot};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -23,138 +23,134 @@ mod server;
 mod system;
 
 pub struct WsSession {
-    hb: Instant,
-    player_entity: Option<Entity>,
-    proxy: GameProxy,
+	hb: Instant,
+	player_entity: Option<Entity>,
+	proxy: GameProxy,
 }
 
 impl Actor for WsSession {
-    type Context = ws::WebsocketContext<Self>;
+	type Context = ws::WebsocketContext<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.hb(ctx);
-    }
+	fn started(&mut self, ctx: &mut Self::Context) {
+		self.hb(ctx);
+	}
 }
 
-struct PlayerView(RenderState);
+struct View(ViewSnapshot);
 
-impl Message for PlayerView {
-    type Result = ();
+impl Message for View {
+	type Result = ();
 }
 
-impl Handler<PlayerView> for WsSession {
-    type Result = ();
+impl Handler<View> for WsSession {
+	type Result = ();
 
-    fn handle(&mut self, msg: PlayerView, ctx: &mut Self::Context) -> Self::Result {
-        ctx.binary(msg.0.serialize());
-    }
+	fn handle(&mut self, msg: View, ctx: &mut Self::Context) -> Self::Result {
+		ctx.binary(msg.0.serialize());
+	}
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        match msg {
-            Ok(ws::Message::Pong(_)) => {
-                self.hb = Instant::now();
-            }
-            Ok(ws::Message::Binary(bin)) => {
-                match Operation::deserialize(bin.as_ref()) {
-                    Operation::Join(name) => {
-                        let (sender, receiver) = futures::channel::oneshot::channel();
-                        self.proxy.create_player(name, sender, ctx.address());
-                        receiver
-                            .into_actor(self)
-                            .then(|e, act, _ctx| {
-                                act.player_entity = Some(e.unwrap());
-                                fut::ready(())
-                            })
-                            .wait(ctx);
-                    }
-                    Operation::Update(player_state) => self
-                        .proxy
-                        .change_movement(self.player_entity, dbg!(player_state)),
-                    // Unused
-                    Operation::Leave => self.proxy.remove_player(self.player_entity),
-                }
-            }
-            Ok(ws::Message::Close(reason)) => {
-                self.proxy.remove_player(self.player_entity);
-                ctx.close(reason);
-                ctx.stop();
-            }
-            _ => (),
-        }
-    }
+	fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+		match msg {
+			Ok(ws::Message::Pong(_)) => {
+				self.hb = Instant::now();
+			}
+			Ok(ws::Message::Binary(bin)) => {
+				match Operation::deserialize(bin.as_ref()) {
+					Operation::Join(name) => {
+						let (sender, receiver) = futures::channel::oneshot::channel();
+						self.proxy.create_player(name, sender, ctx.address());
+						receiver
+							.into_actor(self)
+							.then(|e, act, _ctx| {
+								act.player_entity = Some(e.unwrap());
+								fut::ready(())
+							})
+							.wait(ctx);
+					}
+					Operation::Update(player_state) => {
+						self.proxy.change_movement(self.player_entity, player_state)
+					}
+					// Unused
+					Operation::Leave => self.proxy.remove_player(self.player_entity),
+				}
+			}
+			Ok(ws::Message::Close(reason)) => {
+				self.proxy.remove_player(self.player_entity);
+				ctx.close(reason);
+				ctx.stop();
+			}
+			_ => (),
+		}
+	}
 }
 
 impl WsSession {
-    fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
-        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-            if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
-                println!("Heartbeat failed!");
-                act.proxy.remove_player(act.player_entity);
-                ctx.stop();
-                return;
-            }
-            ctx.ping(b"");
-        });
-    }
+	fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
+		ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+			if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
+				println!("Heartbeat failed!");
+				act.proxy.remove_player(act.player_entity);
+				ctx.stop();
+				return;
+			}
+			ctx.ping(b"");
+		});
+	}
 }
 
 async fn index(
-    req: HttpRequest,
-    stream: web::Payload,
-    data: web::Data<GameProxy>,
+	req: HttpRequest,
+	stream: web::Payload,
+	data: web::Data<GameProxy>,
 ) -> Result<HttpResponse, Error> {
-    let res = ws::start(
-        WsSession {
-            hb: Instant::now(),
-            player_entity: None,
-            proxy: data.as_ref().clone(),
-        },
-        &req,
-        stream,
-    );
-    println!("{:?}", res);
-    res
+	let res = ws::start(
+		WsSession { hb: Instant::now(), player_entity: None, proxy: data.as_ref().clone() },
+		&req,
+		stream,
+	);
+	println!("{:?}", res);
+	res
 }
 
 #[actix_web::main]
 async fn main() {
-    let (s1, r1) = futures::channel::mpsc::unbounded();
-    let (s2, r2) = futures::channel::mpsc::unbounded();
-    let (s3, r3) = futures::channel::mpsc::unbounded();
+	let (s1, r1) = futures::channel::mpsc::unbounded();
+	let (s2, r2) = futures::channel::mpsc::unbounded();
+	let (s3, r3) = futures::channel::mpsc::unbounded();
 
-    futures::future::join(
-        async {
-            bevy::prelude::App::build()
-                .add_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(14)))
-                .add_plugins(MinimalPlugins)
-                .add_plugin(RapierPhysicsPlugin)
-                .add_event::<CreatePlayer>()
-                .add_event::<RemovePlayer>()
-                .add_event::<ChangeMovement>()
-                .add_resource(GameServer::new())
-                .add_resource(EventListener(r1))
-                .add_resource(EventListener(r2))
-                .add_resource(EventListener(r3))
-                .add_startup_system(system::setup.system())
-                .add_system(event::trigger_events.system())
-                .add_system(system::remove_player.system())
-                .add_system(system::create_player.system())
-                .add_system(system::change_movement.system())
-                .add_system(system::next_frame.system())
-                .add_system(system::extract_render_state.system())
-                .run();
-        },
-        HttpServer::new(move || {
-            App::new()
-                .data(GameProxy::new(s1.clone(), s2.clone(), s3.clone()))
-                .service(web::resource("/ws").route(web::get().to(index)))
-                .service(fs::Files::new("/", "dist/").index_file("index.html"))
-        })
-        .bind("127.0.0.1:8080")
-        .unwrap()
-        .run(),
-    )
-    .await;
+	futures::future::join(
+		async {
+			bevy::prelude::App::build()
+				.add_resource(ScheduleRunnerSettings::run_loop(TICK_TIME))
+				.add_plugins(MinimalPlugins)
+				.add_plugin(RapierPhysicsPlugin)
+				.add_event::<CreatePlayer>()
+				.add_event::<RemovePlayer>()
+				.add_event::<ChangeMovement>()
+				.add_resource(GameServer::new())
+				.add_resource(EventListener(r1))
+				.add_resource(EventListener(r2))
+				.add_resource(EventListener(r3))
+				.add_startup_system(system::setup.system())
+				.add_system(event::trigger_events.system())
+				.add_system(system::remove_player.system())
+				.add_system(system::create_player.system())
+				.add_system(system::change_movement.system())
+				.add_system(system::next_frame.system())
+				.add_system(system::extract_render_state.system())
+				.run();
+		},
+		HttpServer::new(move || {
+			App::new()
+				.data(GameProxy::new(s1.clone(), s2.clone(), s3.clone()))
+				.service(web::resource("/ws").route(web::get().to(index)))
+				.service(fs::Files::new("/", "dist/").index_file("index.html"))
+		})
+		.bind("127.0.0.1:8080")
+		.unwrap()
+		.run(),
+	)
+	.await;
 }
