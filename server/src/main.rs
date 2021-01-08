@@ -123,7 +123,7 @@ async fn main() {
 	futures::future::join(
 		async {
 			bevy::prelude::App::build()
-				.add_resource(ScheduleRunnerSettings::run_loop(Duration::from_millis(14)))
+				.add_resource(ScheduleRunnerSettings::run_loop(TICK_TIME))
 				.add_plugins(MinimalPlugins)
 				.add_plugin(RapierPhysicsPlugin)
 				.add_event::<CreatePlayer>()

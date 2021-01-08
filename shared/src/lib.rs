@@ -3,6 +3,8 @@ use std::time::Duration;
 
 pub const MAP_WIDTH: f32 = 10000.0;
 pub const MAP_HEIGHT: f32 = 10000.0;
+pub const INIT_RADIUS: f32 = 20.0;
+pub const CELESTIAL_RADIUS: f32 = 100.0;
 
 #[derive(Serialize, Deserialize)]
 pub enum Operation {

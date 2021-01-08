@@ -9,18 +9,13 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 pub struct GameServer {
-	start_time: Instant,
-	pub(crate) up_time: Duration,
+	pub(crate) start_time: Instant,
 	pub(crate) sessions: HashMap<Entity, Addr<WsSession>>,
 }
 
 impl GameServer {
 	pub fn new() -> Self {
-		GameServer {
-			start_time: Instant::now(),
-			up_time: Duration::from_nanos(0),
-			sessions: HashMap::new(),
-		}
+		GameServer { start_time: Instant::now(), sessions: HashMap::new() }
 	}
 }
 

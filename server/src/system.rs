@@ -5,7 +5,8 @@ use crate::{View, TICK_TIME};
 use bevy::app::{EventReader, Events};
 use bevy::ecs::{Command, Commands, Entity, Local, Or, Query, Res, ResMut, Resources, With, World};
 use game_shared::{
-	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, MAP_HEIGHT, MAP_WIDTH,
+	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS,
+	MAP_HEIGHT, MAP_WIDTH,
 };
 use rand::Rng;
 
@@ -21,10 +22,8 @@ use bevy_rapier2d::rapier::na::Vector3;
 const VIEW_X: f32 = 2080.0;
 const VIEW_Y: f32 = 1170.0;
 const INIT_MASS: f32 = 1.0;
-const INIT_RADIUS: f32 = 20.0;
 const INIT_RESTITUTION: f32 = 1.0;
 const CELESTIAL_MASS: f32 = 20000000.0;
-const CELESTIAL_RADIUS: f32 = 500.0;
 const GRAVITY_CONST: f32 = 1.0;
 
 pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfiguration>) {
@@ -91,7 +90,7 @@ pub fn create_player(
 	for event in events.drain() {
 		let x = rng.gen_range(500.0..3000.0);
 		let y = rng.gen_range(500.0..3000.0);
-		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, false);
+		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS * 100.0, false);
 		let body_collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
 		commands.spawn((
 			Player { name: event.name.clone() },
@@ -111,8 +110,8 @@ impl Command for ChangeMovement {
 	fn write(self: Box<Self>, world: &mut World, resources: &mut Resources) {
 		let (fy, fx) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
 		let mut thrust = world.get_mut::<Thrust>(self.player).expect("No component found.");
-		thrust.x = fx * 400.0;
-		thrust.y = fy * 400.0;
+		thrust.x = fx * 40000.0;
+		thrust.y = fy * 40000.0;
 		// let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
 		// ori.deg = self.state.ori;
 	}
@@ -147,7 +146,6 @@ pub fn next_frame(
 		Or<(With<Player>, With<Shape>)>,
 	>,
 ) {
-	game_state.up_time += TICK_TIME;
 	for (thrust, player_handle, player_transform) in object_query.iter() {
 		let mut force = Vector2::new(thrust.x, thrust.y);
 		let player_body = rigid_body_set.get(player_handle.handle()).unwrap();
@@ -230,7 +228,7 @@ pub fn extract_render_state(
 		let self_pos = Position { x: self_pos.translation.x, y: self_pos.translation.y };
 
 		let state = ViewSnapshot {
-			time: game_state.up_time,
+			time: game_state.start_time.elapsed(),
 			self_pos,
 			players: positions,
 			static_pos,

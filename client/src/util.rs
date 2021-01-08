@@ -62,6 +62,23 @@ where
 
 	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		let this = self.project();
+		// if !self.flag {
+		// 	let a_done = match this.s1.poll_next(cx) {
+		// 		Poll::Ready(Some(item)) => {
+		// 			// give the other stream a chance to go first next time
+		// 			self.flag = !self.flag;
+		// 			return Poll::Ready(Some(Either::Left(item)));
+		// 		}
+		// 		Poll::Ready(None) => true,
+		// 		Poll::Pending => false,
+		// 	};
+		//
+		// 	match this.s2.poll_next(cx) {
+		// 		Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Right(item))),
+		// 		Poll::Ready(None) if a_done => Poll::Ready(None),
+		// 		Poll::Ready(None) | Poll::Pending => Poll::Pending,
+		// 	}
+		// }
 		if *this.flag {
 			poll_inner2(this.flag, this.s2, this.s1, cx)
 		} else {
@@ -103,9 +120,9 @@ fn poll_inner2<S1, S2>(
 	b: Pin<&mut S2>,
 	cx: &mut Context<'_>,
 ) -> Poll<Option<Either<S2::Item, S1::Item>>>
-	where
-		S1: Stream,
-		S2: Stream,
+where
+	S1: Stream,
+	S2: Stream,
 {
 	let a_done = match a.poll_next(cx) {
 		Poll::Ready(Some(item)) => {

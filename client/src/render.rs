@@ -1,5 +1,6 @@
 use game_shared::{
-	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, MAP_HEIGHT, MAP_WIDTH,
+	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS,
+	MAP_HEIGHT, MAP_WIDTH,
 };
 use piet::kurbo::{Circle, CircleSegment, Rect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
@@ -44,7 +45,7 @@ impl Render for PlayerView {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let x = self.pos.x as f64;
 		let y = self.pos.y as f64;
-		let shape = Circle::new((x, y), 20.0);
+		let shape = Circle::new((x, y), INIT_RADIUS as f64);
 		let brush = piet_ctx.solid_brush(Color::SILVER);
 		piet_ctx.fill(&shape, &brush);
 		let brush1 = piet_ctx.solid_brush(Color::grey(0.9));
@@ -69,7 +70,7 @@ impl Render for PlayerView {
 impl Render for StaticView {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let pt = (self.pos.x as f64, self.pos.y as f64);
-		let shape = Circle::new(pt, 20.0);
+		let shape = Circle::new(pt, INIT_RADIUS as f64);
 		let brush = piet_ctx.solid_brush(Color::grey(0.5));
 		piet_ctx.fill(&shape, &brush);
 	}
@@ -78,7 +79,7 @@ impl Render for StaticView {
 impl Render for CelestialView {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let pt = (self.pos.x as f64, self.pos.y as f64);
-		let shape = Circle::new(pt, 500.0);
+		let shape = Circle::new(pt, CELESTIAL_RADIUS as f64);
 		let brush = piet_ctx.solid_brush(Color::grey(1.0));
 		piet_ctx.fill(&shape, &brush);
 	}
@@ -234,7 +235,7 @@ impl Interpolator {
 	}
 
 	pub fn update(&mut self, now: f64, next: RenderState) {
-		self.base_time = self.prev.time.as_millis() as f64 - now;
 		self.prev = std::mem::replace(&mut self.next, next);
+		self.base_time = self.prev.time.as_millis() as f64 - now;
 	}
 }

@@ -184,21 +184,21 @@ pub async fn start() {
 	});
 	let prev_frame = key_frames.next().await.unwrap();
 	let next_frame = key_frames.next().await.unwrap();
-	let mut interpolator = Interpolator::new(perf.now(), prev_frame, next_frame);
 	let mut stream = util::merge(
 		AnimationFrame::new(),
 		util::with_latest(key_frames, control_state_signal.to_stream()),
 	);
 
+	let mut interpolator = Interpolator::new(perf.now(), prev_frame, next_frame);
 	while let Some(data) = stream.next().await {
 		match data {
-			Either::Left(time) => {
-				interpolator.interpolate(time, &canvas).render(&mut piet_ctx)
-			}
+			Either::Left(time) => interpolator.interpolate(time, &canvas).render(&mut piet_ctx),
 			Either::Right((render_state, control)) => {
 				interpolator.update(perf.now(), render_state);
 				if let Some(state) = control {
-					ws_sender.send(WsMessage::Binary(Operation::Update(state.state()).serialize())).await;
+					ws_sender
+						.send(WsMessage::Binary(Operation::Update(state.state()).serialize()))
+						.await;
 				}
 			}
 		}
