@@ -1,29 +1,20 @@
 use crate::render::{Interpolator, Render, RenderState};
 use either::Either;
-use futures::stream::select;
-use futures::{stream, SinkExt, Stream, StreamExt};
+use futures::{SinkExt, Stream, StreamExt};
 use futures_signals::signal::{Mutable, SignalExt};
-use game_shared::{Operation, PlayerState, ViewSnapshot, MAP_HEIGHT, MAP_WIDTH};
+use game_shared::{Operation, PlayerState, ViewSnapshot};
 use gloo::events::EventListener;
-use piet::kurbo::{Circle, CircleSegment, Rect};
-use piet::{
-	Color, FontFamily, RenderContext, Text, TextAlignment, TextAttribute, TextLayout,
-	TextLayoutBuilder,
-};
-use piet_web::{WebRenderContext, WebTextLayout};
-use pin_project::pin_project;
-use std::cell::{RefCell, UnsafeCell};
-use std::collections::VecDeque;
+use piet_web::WebRenderContext;
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
-use std::time::{Duration, Instant};
 use std::{f32, f64};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::{Clamped, JsCast, JsValue};
-use web_sys::{ImageData, KeyboardEvent, MouseEvent};
-use ws_stream_wasm::{WsMessage, WsMeta, WsStream};
+use wasm_bindgen::JsCast;
+use web_sys::{KeyboardEvent, MouseEvent};
+use ws_stream_wasm::{WsMessage, WsMeta};
 
 mod render;
 mod util;
@@ -100,7 +91,7 @@ pub async fn start() {
 	let canvas = document.get_element_by_id("canvas").unwrap();
 	let canvas: web_sys::HtmlCanvasElement =
 		canvas.dyn_into::<web_sys::HtmlCanvasElement>().map_err(|_| ()).unwrap();
-	let mut context = canvas
+	let context = canvas
 		.get_context("2d")
 		.unwrap()
 		.unwrap()
@@ -163,17 +154,20 @@ pub async fn start() {
 	let mut name_stream = name_state.signal().to_stream();
 	name_stream.next().await;
 	name_stream.next().await;
-	name_input.style().set_property("display", "none");
+	name_input.style().set_property("display", "none").unwrap();
 
 	let window = web_sys::window().expect("Window doesn't exist.");
 	let perf = window.performance().expect("No Performance found.");
 	let mut piet_ctx = WebRenderContext::new(context, window);
 
-	let (mut ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None)
+	let (ws_meta, mut ws_stream) = WsMeta::connect("ws://127.0.0.1:8080/ws", None)
 		.await
 		.expect("Websocket connection failed.");
-	ws_stream.send(WsMessage::Binary(Operation::Join(name_input.value()).serialize())).await;
-	let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+	ws_stream
+		.send(WsMessage::Binary(Operation::Join(name_input.value()).serialize()))
+		.await
+		.expect("Failed to send join info.");
+	let (mut ws_sender, ws_receiver) = ws_stream.split();
 	let control_state_signal = control_state.signal();
 
 	let mut key_frames = ws_receiver.filter_map(|message| match message {
@@ -198,11 +192,13 @@ pub async fn start() {
 				if let Some(state) = control {
 					ws_sender
 						.send(WsMessage::Binary(Operation::Update(state.state()).serialize()))
-						.await;
+						.await
+						.expect("Failed to send user control.");
 				}
 			}
 		}
 	}
+	ws_meta.close().await.expect("Failed to close Websocket.");
 }
 
 struct AnimationState {
@@ -219,7 +215,7 @@ struct AnimationFrame {
 impl Stream for AnimationFrame {
 	type Item = f64;
 
-	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		let mut state = self.get_mut().state.borrow_mut();
 		let state = state.as_mut().unwrap();
 		if state.timestamp.is_nan() {

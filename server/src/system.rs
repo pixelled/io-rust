@@ -1,7 +1,7 @@
 use crate::component::*;
 use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer};
 use crate::server::GameServer;
-use crate::{View, TICK_TIME};
+use crate::View;
 use bevy::app::{EventReader, Events};
 use bevy::ecs::{Command, Commands, Entity, Local, Or, Query, Res, ResMut, Resources, With, World};
 use game_shared::{
@@ -17,7 +17,6 @@ use bevy_rapier2d::rapier::geometry::ColliderBuilder;
 use bevy_rapier2d::rapier::ncollide::na::Vector2;
 
 use bevy::prelude::{Transform, Vec3};
-use bevy_rapier2d::rapier::na::Vector3;
 
 const VIEW_X: f32 = 2080.0;
 const VIEW_Y: f32 = 1170.0;
@@ -107,7 +106,7 @@ pub fn create_player(
 }
 
 impl Command for ChangeMovement {
-	fn write(self: Box<Self>, world: &mut World, resources: &mut Resources) {
+	fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
 		let (fy, fx) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
 		let mut thrust = world.get_mut::<Thrust>(self.player).expect("No component found.");
 		thrust.x = fx * 40000.0;
@@ -137,7 +136,6 @@ pub fn remove_player(
 }
 
 pub fn next_frame(
-	mut game_state: ResMut<GameServer>,
 	mut rigid_body_set: ResMut<RigidBodySet>,
 	celestial_query: Query<(&CelestialBody, &RigidBodyHandleComponent, &Transform)>,
 	// player_query: Query<(&Thrust, &RigidBodyHandleComponent, &Transform), With<Player>>,
@@ -171,7 +169,7 @@ pub fn extract_render_state(
 		// Collect players' positions.
 		let positions = query
 			.iter()
-			.filter(|(entity, _, pos)| {
+			.filter(|(_, _, pos)| {
 				(self_pos.translation.x - pos.translation.x).abs() < VIEW_X
 					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
 			})

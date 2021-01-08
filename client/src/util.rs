@@ -17,11 +17,7 @@ pub struct WithLatest<S: Stream, A: Stream> {
 	val: Option<<A as Stream>::Item>,
 }
 
-impl<S, A> Stream for WithLatest<S, A>
-where
-	S: Stream + Unpin,
-	A: Stream + Unpin,
-{
+impl<S: Stream, A: Stream> Stream for WithLatest<S, A> {
 	type Item = (<S as Stream>::Item, Option<<A as Stream>::Item>);
 
 	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -53,90 +49,41 @@ pub struct Merge<S1: Stream, S2: Stream> {
 	flag: bool,
 }
 
-impl<S1, S2> Stream for Merge<S1, S2>
-where
-	S1: Stream,
-	S2: Stream,
-{
+impl<S1: Stream, S2: Stream> Stream for Merge<S1, S2> {
 	type Item = Either<S1::Item, S2::Item>;
 
 	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		let this = self.project();
-		// if !self.flag {
-		// 	let a_done = match this.s1.poll_next(cx) {
-		// 		Poll::Ready(Some(item)) => {
-		// 			// give the other stream a chance to go first next time
-		// 			self.flag = !self.flag;
-		// 			return Poll::Ready(Some(Either::Left(item)));
-		// 		}
-		// 		Poll::Ready(None) => true,
-		// 		Poll::Pending => false,
-		// 	};
-		//
-		// 	match this.s2.poll_next(cx) {
-		// 		Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Right(item))),
-		// 		Poll::Ready(None) if a_done => Poll::Ready(None),
-		// 		Poll::Ready(None) | Poll::Pending => Poll::Pending,
-		// 	}
-		// }
-		if *this.flag {
-			poll_inner2(this.flag, this.s2, this.s1, cx)
+		if !*this.flag {
+			let first_done = match this.s1.poll_next(cx) {
+				Poll::Ready(Some(item)) => {
+					*this.flag = !*this.flag;
+					return Poll::Ready(Some(Either::Left(item)));
+				}
+				Poll::Ready(None) => true,
+				Poll::Pending => false,
+			};
+
+			match this.s2.poll_next(cx) {
+				Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Right(item))),
+				Poll::Ready(None) if first_done => Poll::Ready(None),
+				Poll::Ready(None) | Poll::Pending => Poll::Pending,
+			}
 		} else {
-			poll_inner1(this.flag, this.s1, this.s2, cx)
+			let first_done = match this.s2.poll_next(cx) {
+				Poll::Ready(Some(item)) => {
+					*this.flag = !*this.flag;
+					return Poll::Ready(Some(Either::Right(item)));
+				}
+				Poll::Ready(None) => true,
+				Poll::Pending => false,
+			};
+
+			match this.s1.poll_next(cx) {
+				Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Left(item))),
+				Poll::Ready(None) if first_done => Poll::Ready(None),
+				Poll::Ready(None) | Poll::Pending => Poll::Pending,
+			}
 		}
-	}
-}
-
-fn poll_inner1<S1, S2>(
-	flag: &mut bool,
-	a: Pin<&mut S1>,
-	b: Pin<&mut S2>,
-	cx: &mut Context<'_>,
-) -> Poll<Option<Either<S1::Item, S2::Item>>>
-where
-	S1: Stream,
-	S2: Stream,
-{
-	let a_done = match a.poll_next(cx) {
-		Poll::Ready(Some(item)) => {
-			// give the other stream a chance to go first next time
-			*flag = !*flag;
-			return Poll::Ready(Some(Either::Left(item)));
-		}
-		Poll::Ready(None) => true,
-		Poll::Pending => false,
-	};
-
-	match b.poll_next(cx) {
-		Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Right(item))),
-		Poll::Ready(None) if a_done => Poll::Ready(None),
-		Poll::Ready(None) | Poll::Pending => Poll::Pending,
-	}
-}
-
-fn poll_inner2<S1, S2>(
-	flag: &mut bool,
-	a: Pin<&mut S1>,
-	b: Pin<&mut S2>,
-	cx: &mut Context<'_>,
-) -> Poll<Option<Either<S2::Item, S1::Item>>>
-where
-	S1: Stream,
-	S2: Stream,
-{
-	let a_done = match a.poll_next(cx) {
-		Poll::Ready(Some(item)) => {
-			// give the other stream a chance to go first next time
-			*flag = !*flag;
-			return Poll::Ready(Some(Either::Right(item)));
-		}
-		Poll::Ready(None) => true,
-		Poll::Pending => false,
-	};
-
-	match b.poll_next(cx) {
-		Poll::Ready(Some(item)) => Poll::Ready(Some(Either::Left(item))),
-		Poll::Ready(None) if a_done => Poll::Ready(None),
-		Poll::Ready(None) | Poll::Pending => Poll::Pending,
 	}
 }

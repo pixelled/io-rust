@@ -6,7 +6,7 @@ use futures::channel::mpsc::UnboundedSender;
 use futures::channel::oneshot::Sender;
 use game_shared::PlayerState;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub struct GameServer {
 	pub(crate) start_time: Instant,

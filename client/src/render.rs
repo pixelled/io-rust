@@ -1,13 +1,11 @@
 use game_shared::{
 	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS,
-	MAP_HEIGHT, MAP_WIDTH,
 };
-use piet::kurbo::{Circle, CircleSegment, Rect};
+use piet::kurbo::{Circle, CircleSegment};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use wasm_bindgen::convert::IntoWasmAbi;
+use std::time::Duration;
 
 pub struct RenderState {
 	pub time: Duration,
@@ -197,7 +195,7 @@ impl Interpolate for RenderState {
 			players: interp_items(&self.players, &other.players, t),
 			static_pos: interp_items(&self.static_pos, &other.static_pos, t),
 			celestial_pos: interp_items(&self.celestial_pos, &other.celestial_pos, t),
-			map: MiniMap { pos: self_pos, self_pos: self_pos.clone() },
+			map: MiniMap { pos: self_pos, self_pos },
 		}
 	}
 }
