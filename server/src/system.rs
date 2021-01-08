@@ -11,9 +11,9 @@ use game_shared::{
 use rand::Rng;
 
 use bevy_rapier2d::na::Point2;
-use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent};
+use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, EventQueue};
 use bevy_rapier2d::rapier::dynamics::{RigidBodyBuilder, RigidBodySet};
-use bevy_rapier2d::rapier::geometry::ColliderBuilder;
+use bevy_rapier2d::rapier::geometry::{ColliderBuilder, ContactEvent, ColliderSet};
 use bevy_rapier2d::rapier::ncollide::na::Vector2;
 
 use bevy::prelude::{Transform, Vec3};
@@ -156,6 +156,15 @@ pub fn next_frame(
 				/ displacement.norm().powi(3);
 		}
 		rigid_body_set.get_mut(player_handle.handle()).unwrap().apply_force(force, true);
+	}
+}
+
+pub fn collisions(events: ResMut<EventQueue>, collider_set: Res<ColliderSet>, mut rigid_body_set: ResMut<RigidBodySet>) {
+	while let Ok(contact_event) = events.contact_events.pop() {
+		if let ContactEvent::Started(first_handle, second_handle) = contact_event {
+			let mut first_body = rigid_body_set.get_mut(collider_set.get(first_handle).unwrap().parent()).unwrap();
+			let mut second_body = rigid_body_set.get_mut( collider_set.get(second_handle).unwrap().parent()).unwrap();
+		}
 	}
 }
 
