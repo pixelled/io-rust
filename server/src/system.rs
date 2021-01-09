@@ -25,6 +25,21 @@ const INIT_RESTITUTION: f32 = 1.0;
 const CELESTIAL_MASS: f32 = 20000000.0;
 const GRAVITY_CONST: f32 = 1.0;
 
+fn create_entity(commands: &mut Commands, role: Role, rigid_body_builder: RigidBodyBuilder, collider_builder: ColliderBuilder) -> Entity {
+	let entity = commands.spawn(
+		(
+			match role { Role::Player(name) => Player { name },
+				Role::Boundary(info) => Boundary { info },
+				Role::CelestialBody(form) => CelestialBody { form },
+				Role::Shape(id) => Shape { id }},
+			collider_builder,
+		)
+	).current_entity().unwrap();
+	rigid_body_builder.user_data(entity as u128);
+	commands.insert_one(entity, rigid_body_builder);
+	entity
+}
+
 pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfiguration>) {
 	let mut rng = rand::thread_rng();
 
@@ -32,52 +47,70 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 	configuration.gravity = Vector2::new(0.0, 0.0);
 
 	// Boundaries.
-	commands.spawn((
-		Boundary,
-		RigidBodyBuilder::new_static(),
-		ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0))
-			.restitution(INIT_RESTITUTION),
-	));
-	commands.spawn((
-		Boundary,
-		RigidBodyBuilder::new_static(),
-		ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT))
-			.restitution(INIT_RESTITUTION),
-	));
-	commands.spawn((
-		Boundary,
-		RigidBodyBuilder::new_static(),
-		ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT))
-			.restitution(INIT_RESTITUTION),
-	));
-	commands.spawn((
-		Boundary,
-		RigidBodyBuilder::new_static(),
-		ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT))
-			.restitution(INIT_RESTITUTION),
-	));
+	create_entity(commands, Role::Boundary("Top".to_string()),
+				  RigidBodyBuilder::new_static(),
+				  ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0)).restitution(INIT_RESTITUTION));
+	// commands.spawn((
+	// 	Boundary,
+	// 	RigidBodyBuilder::new_static(),
+	// 	ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0))
+	// 		.restitution(INIT_RESTITUTION),
+	// ));
+	create_entity(commands, Role::Boundary("Left".to_string()),
+				  RigidBodyBuilder::new_static(),
+				  ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
+	// commands.spawn((
+	// 	Boundary,
+	// 	RigidBodyBuilder::new_static(),
+	// 	ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT))
+	// 		.restitution(INIT_RESTITUTION),
+	// ));
+	create_entity(commands, Role::Boundary("Right".to_string()),
+				  RigidBodyBuilder::new_static(),
+				  ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
+	// commands.spawn((
+	// 	Boundary,
+	// 	RigidBodyBuilder::new_static(),
+	// 	ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT))
+	// 		.restitution(INIT_RESTITUTION),
+	// ));
+	create_entity(commands, Role::Boundary("Bottom".to_string()),
+				  RigidBodyBuilder::new_static(),
+				  ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
+	// commands.spawn((
+	// 	Boundary,
+	// 	RigidBodyBuilder::new_static(),
+	// 	ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT))
+	// 		.restitution(INIT_RESTITUTION),
+	// ));
 
 	// Random stuffs.
 	for _ in 0..1000 {
 		let x = rng.gen_range(20.0..8000.0);
 		let y = rng.gen_range(20.0..8000.0);
 		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, false);
-		let body_collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
-		commands.spawn((
-			Shape { id: 0 },
-			Thrust { x: 0.0, y: 0.0 },
-			Transform::from_translation(Vec3::new(x, y, 0.0)),
-			body,
-			body_collider,
-		));
+		let collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
+		let entity = create_entity(commands, Role::Shape(0), body, collider);
+		commands.insert(entity, (Thrust { x: 0.0, y: 0.0 }, Transform::from_translation(Vec3::new(x, y, 0.0))))
+		// commands.spawn((
+		// 	Shape { id: 0 },
+		// 	Thrust { x: 0.0, y: 0.0 },
+		// 	Transform::from_translation(Vec3::new(x, y, 0.0)),
+		// 	body,
+		// 	collider,
+		// ));
 	}
 
-	commands.spawn((
-		CelestialBody { form: "".to_string() },
-		Transform::identity(),
-		RigidBodyBuilder::new_static().translation(2000.0, 2000.0).mass(CELESTIAL_MASS, false),
-		ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION),
-	));
+	let planet = create_entity(commands, Role::CelestialBody("Planet".to_string()),
+							   RigidBodyBuilder::new_static().translation(2000.0, 2000.0).mass(CELESTIAL_MASS, false),
+							   ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION));
+	commands.insert_one(planet, Transform::identity());
+	// commands.spawn((
+	// 	CelestialBody { form: "".to_string() },
+	// 	Transform::identity(),
+	// 	RigidBodyBuilder::new_static().translation(2000.0, 2000.0).mass(CELESTIAL_MASS, false),
+	// 	ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION),
+	// ));
 }
 
 pub fn create_player(
@@ -90,15 +123,17 @@ pub fn create_player(
 		let x = rng.gen_range(500.0..3000.0);
 		let y = rng.gen_range(500.0..3000.0);
 		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS * 100.0, false);
-		let body_collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
-		commands.spawn((
-			Player { name: event.name.clone() },
-			Thrust { x: 0.0, y: 0.0 },
-			Transform::from_translation(Vec3::new(x, y, 0.0)),
-			body,
-			body_collider,
-		));
-		let entity = commands.current_entity().unwrap();
+		let collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
+		let entity = create_entity(commands, Role::Player(event.name.clone()), body, collider);
+		commands.insert(entity, (Thrust { x: 0.0, y: 0.0 }, Transform::from_translation(Vec3::new(x, y, 0.0))));
+		// commands.spawn((
+		// 	Player { name: event.name.clone() },
+		// 	Thrust { x: 0.0, y: 0.0 },
+		// 	Transform::from_translation(Vec3::new(x, y, 0.0)),
+		// 	body,
+		// 	collider,
+		// ));
+		// let entity = commands.current_entity().unwrap();
 		game_state.sessions.insert(entity, event.session.clone());
 		event.sender.send(entity).unwrap();
 		println!("Player {} (#{}) joined the game.", event.name, entity.id());
