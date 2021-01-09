@@ -194,6 +194,8 @@ pub fn collisions(events: ResMut<EventQueue>, collider_set: Res<ColliderSet>, mu
 		if let ContactEvent::Started(first_handle, second_handle) = contact_event {
 			let mut first_body = rigid_body_set.get_mut(collider_set.get(first_handle).unwrap().parent()).unwrap();
 			let mut second_body = rigid_body_set.get_mut( collider_set.get(second_handle).unwrap().parent()).unwrap();
+			let mut first_entity = Entity::from_bits(first_body.user_data as u64);
+			let mut second_entity = Entity::from_bits(second_body.user_data as u64);
 		}
 	}
 }
