@@ -26,17 +26,12 @@ const CELESTIAL_MASS: f32 = 20000000.0;
 const GRAVITY_CONST: f32 = 1.0;
 
 fn create_entity(commands: &mut Commands, role: Role, rigid_body_builder: RigidBodyBuilder, collider_builder: ColliderBuilder) -> Entity {
-	let entity = commands.spawn(
-		(
-			match role { Role::Player(name) => Player { name },
-				Role::Boundary(info) => Boundary { info },
-				Role::CelestialBody(form) => CelestialBody { form },
-				Role::Shape(id) => Shape { id }},
-			collider_builder,
-		)
-	).current_entity().unwrap();
-	rigid_body_builder.user_data(entity as u128);
-	commands.insert_one(entity, rigid_body_builder);
+	let entity = commands.spawn(()).current_entity().unwrap();
+	commands.insert(entity, (rigid_body_builder.user_data(entity.to_bits() as u128), collider_builder));
+	match role { Role::Player(name) => commands.insert_one(entity, Player { name }),
+		Role::Boundary(info) => commands.insert_one(entity, Boundary { info }),
+		Role::CelestialBody(form) => commands.insert_one(entity, CelestialBody { form }),
+		Role::Shape(id) => commands.insert_one(entity, Shape {id})};
 	entity
 }
 
@@ -91,7 +86,7 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, false);
 		let collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
 		let entity = create_entity(commands, Role::Shape(0), body, collider);
-		commands.insert(entity, (Thrust { x: 0.0, y: 0.0 }, Transform::from_translation(Vec3::new(x, y, 0.0))))
+		commands.insert(entity, (Thrust { x: 0.0, y: 0.0 }, Transform::from_translation(Vec3::new(x, y, 0.0))));
 		// commands.spawn((
 		// 	Shape { id: 0 },
 		// 	Thrust { x: 0.0, y: 0.0 },

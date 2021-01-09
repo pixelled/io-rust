@@ -17,7 +17,7 @@ pub struct Thrust {
 }
 
 pub struct Boundary {
-	info: String,
+	pub info: String,
 }
 
 pub struct CelestialBody {
