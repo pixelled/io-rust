@@ -98,15 +98,15 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 
 	create_entity(commands, Role::CelestialBody("Planet".to_string()),
 				  4029.99564, 5243.08753,
-				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(466.2036850, 432.3657300),
+				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(46.62036850, 43.23657300),
 				  ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION));
 	create_entity(commands, Role::CelestialBody("Planet".to_string()),
 				  5000.0, 5000.0,
-				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(-932.40737, -864.73146),
+				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(-93.240737, -86.473146),
 				  ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION));
 	create_entity(commands, Role::CelestialBody("Planet".to_string()),
 				  5970.00436, 4756.91247,
-				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(466.2036850, 432.3657300),
+				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(46.62036850, 43.23657300),
 				  ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION));
 	// commands.spawn((
 	// 	CelestialBody { form: "".to_string() },
