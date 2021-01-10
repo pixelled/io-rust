@@ -1,7 +1,5 @@
-use game_shared::{
-	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS,
-};
-use piet::kurbo::{Circle, CircleSegment};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT};
+use piet::kurbo::{Circle, CircleSegment, Rect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
 use std::collections::HashMap;
@@ -111,22 +109,24 @@ pub struct MiniMap {
 
 impl Render for MiniMap {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
-		// let len = 75.0;
-		// let shape = Rect::new(map_x - len, map_y - len, map_x + len, map_y + len);
-		// let brush = piet_ctx.solid_brush(Color::grey(0.8));
-		// piet_ctx.fill(&shape, &brush);
-		// let brush = piet_ctx.solid_brush(Color::grey(0.3));
-		// piet_ctx.stroke(&shape, &brush, 7.0);
-		//
-		// let shape = Circle::new(
-		// 	(
-		// 		map_x - len + (self.self_pos.x / MAP_WIDTH) as f64 * map_len,
-		// 		map_y - len + (self.self_pos.y / MAP_HEIGHT) as f64 * map_len,
-		// 	),
-		// 	2.0,
-		// );
-		// let brush = piet_ctx.solid_brush(Color::BLACK);
-		// piet_ctx.fill(&shape, &brush);
+		let map_x = self.pos.x as f64;
+		let map_y = self.pos.y as f64;
+		let len = 75.0;
+		let shape = Rect::new(map_x - len, map_y - len, map_x + len, map_y + len);
+		let brush = piet_ctx.solid_brush(Color::grey(0.8));
+		piet_ctx.fill(&shape, &brush);
+		let brush = piet_ctx.solid_brush(Color::grey(0.3));
+		piet_ctx.stroke(&shape, &brush, 7.0);
+
+		let shape = Circle::new(
+			(
+				map_x - len + (self.self_pos.x / MAP_WIDTH) as f64 * 2.0 * len,
+				map_y - len + (self.self_pos.y / MAP_HEIGHT) as f64 * 2.0 * len,
+			),
+			2.0,
+		);
+		let brush = piet_ctx.solid_brush(Color::BLACK);
+		piet_ctx.fill(&shape, &brush);
 	}
 }
 
@@ -229,6 +229,7 @@ impl Interpolator {
 			player.pos.x -= offset_x;
 			player.pos.y -= offset_y;
 		}
+		view.map.pos = Position { x: canvas.width() as f32 - 100.0 , y: canvas.height() as f32 - 100.0 };
 		view
 	}
 

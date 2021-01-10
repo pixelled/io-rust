@@ -151,8 +151,8 @@ impl Command for ChangeMovement {
 	fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
 		let (fy, fx) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
 		let mut thrust = world.get_mut::<Thrust>(self.player).expect("No component found.");
-		thrust.x = fx * 1000.0;
-		thrust.y = fy * 1000.0;
+		thrust.x = fx * 40000.0;
+		thrust.y = fy * 40000.0;
 		// let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
 		// ori.deg = self.state.ori;
 	}
