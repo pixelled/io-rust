@@ -1,4 +1,4 @@
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT, VIEW_X, VIEW_Y};
 use piet::kurbo::{Circle, CircleSegment, Rect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
@@ -105,6 +105,8 @@ pub struct MiniMap {
 	pub pos: Position,
 	// Player position.
 	pub self_pos: Position,
+	// Celestial position.
+	pub cele_views: Vec<CelestialView>,
 }
 
 impl Render for MiniMap {
@@ -116,7 +118,7 @@ impl Render for MiniMap {
 		let brush = piet_ctx.solid_brush(Color::grey(0.8));
 		piet_ctx.fill(&shape, &brush);
 		let brush = piet_ctx.solid_brush(Color::grey(0.3));
-		piet_ctx.stroke(&shape, &brush, 7.0);
+		piet_ctx.stroke(&shape, &brush, 3.0);
 
 		let shape = Circle::new(
 			(
@@ -127,6 +129,18 @@ impl Render for MiniMap {
 		);
 		let brush = piet_ctx.solid_brush(Color::BLACK);
 		piet_ctx.fill(&shape, &brush);
+
+		for cele_view in self.cele_views.iter() {
+			let shape = Circle::new(
+				(
+					map_x - len + (cele_view.pos.x / MAP_WIDTH) as f64 * 2.0 * len,
+					map_y - len + (cele_view.pos.y / MAP_HEIGHT) as f64 * 2.0 * len,
+				),
+				4.0,
+			);
+			let brush = piet_ctx.solid_brush(Color::grey(0.5));
+			piet_ctx.fill(&shape, &brush);
+		}
 	}
 }
 
@@ -190,12 +204,13 @@ impl Interpolate for RenderState {
 		}
 
 		let self_pos = self.self_pos.interp_with(&other.self_pos, t);
+		let cele_views = interp_items(&self.celestial_pos, &other.celestial_pos, t);
 		FinalView {
 			self_pos,
 			players: interp_items(&self.players, &other.players, t),
 			static_pos: interp_items(&self.static_pos, &other.static_pos, t),
-			celestial_pos: interp_items(&self.celestial_pos, &other.celestial_pos, t),
-			map: MiniMap { pos: self_pos, self_pos },
+			celestial_pos: cele_views.clone(),
+			map: MiniMap { pos: self_pos, self_pos, cele_views },
 		}
 	}
 }
@@ -215,6 +230,12 @@ impl Interpolator {
 		let t = (self.base_time + time - self.prev.time.as_millis() as f64) as f32
 			/ (self.next.time - self.prev.time).as_millis() as f32;
 		let mut view = self.prev.interp_with(&self.next, t);
+
+		view.map.pos = Position { x: canvas.width() as f32 - 100.0 , y: canvas.height() as f32 - 100.0 };
+		view.celestial_pos.iter().filter(|cele_view| {
+			(view.self_pos.x - cele_view.pos.x).abs() < VIEW_X && (view.self_pos.y - cele_view.pos.y).abs() < VIEW_Y
+		});
+
 		let offset_x = view.self_pos.x - canvas.width() as f32 / 2.0;
 		let offset_y = view.self_pos.y - canvas.height() as f32 / 2.0;
 		for celestial in view.celestial_pos.iter_mut() {
@@ -229,7 +250,6 @@ impl Interpolator {
 			player.pos.x -= offset_x;
 			player.pos.y -= offset_y;
 		}
-		view.map.pos = Position { x: canvas.width() as f32 - 100.0 , y: canvas.height() as f32 - 100.0 };
 		view
 	}
 

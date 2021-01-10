@@ -4,10 +4,7 @@ use crate::server::GameServer;
 use crate::{View, TICK_TIME};
 use bevy::app::{EventReader, Events};
 use bevy::ecs::{Command, Commands, Entity, Local, Or, Query, Res, ResMut, Resources, With, World};
-use game_shared::{
-	CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS,
-	MAP_HEIGHT, MAP_WIDTH,
-};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y};
 use rand::Rng;
 
 use bevy_rapier2d::na::{Point2, Isometry, Translation, Rotation2};
@@ -18,8 +15,6 @@ use bevy_rapier2d::rapier::ncollide::na::{Vector2, Unit};
 
 use bevy::prelude::{Transform, Vec3};
 
-const VIEW_X: f32 = 2080.0;
-const VIEW_Y: f32 = 1170.0;
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
 const CELESTIAL_MASS: f32 = 10000000.0;
@@ -261,20 +256,8 @@ pub fn extract_render_state(
 		// Collect celestial positions.
 		let celestial_pos = celestial_query
 			.iter()
-			.filter_map(|(entity, _, pos)| {
-				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X + CELESTIAL_RADIUS
-					&& (self_pos.translation.y - pos.translation.y).abs()
-						< VIEW_Y + CELESTIAL_RADIUS
-				{
-					Some((
-						entity.to_bits(),
-						CelestialView {
-							pos: Position { x: pos.translation.x, y: pos.translation.y },
-						},
-					))
-				} else {
-					None
-				}
+			.map(|(entity, _, pos)| {
+				(entity.to_bits(), CelestialView { pos: Position { x: pos.translation.x, y: pos.translation.y } })
 			})
 			.collect();
 
