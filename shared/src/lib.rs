@@ -148,3 +148,25 @@ impl CelestialView {
 		CelestialView { pos: Position::interpolate(&prev.pos, &next.pos, t) }
 	}
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum EffectType {
+	BodyDamage(f32, f32),
+	ShieldDeflection(f32, f32),
+	ShieldAbsorption(f32, f32),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Status {
+	pub effects: Vec<EffectType>,
+}
+
+impl Status {
+	pub fn serialize(&self) -> Vec<u8> {
+		bincode::serialize(&self).expect("Cannot serialize Events.")
+	}
+
+	pub fn deserialize(data: &[u8]) -> Self {
+		bincode::deserialize(data).expect("Cannot deserialize to Events.")
+	}
+}

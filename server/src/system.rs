@@ -4,7 +4,7 @@ use crate::server::GameServer;
 use crate::{View, TICK_TIME};
 use bevy::app::{EventReader, Events};
 use bevy::ecs::{Command, Commands, Entity, Local, Or, Query, Res, ResMut, Resources, With, World};
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType,  CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y};
 use rand::Rng;
 
 use bevy_rapier2d::na::{Point2, Isometry, Translation, Rotation2};
@@ -13,7 +13,7 @@ use bevy_rapier2d::rapier::dynamics::{RigidBodyBuilder, RigidBodySet};
 use bevy_rapier2d::rapier::geometry::{ColliderBuilder, ContactEvent, ColliderSet};
 use bevy_rapier2d::rapier::ncollide::na::{Vector2, Unit};
 
-use bevy::prelude::{Transform, Vec3};
+use bevy::prelude::*;
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -21,18 +21,21 @@ const CELESTIAL_MASS: f32 = 10000000.0;
 const GRAVITY_CONST: f32 = 1.0;
 
 fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body_builder: RigidBodyBuilder, collider_builder: ColliderBuilder) -> Entity {
-	let entity = commands.spawn(()).current_entity().unwrap();
-	match role { Role::Player(name) => commands.insert_one(entity, Player { name }),
+	let entity = commands.spawn((
+		Thrust {x: 0.0, y: 0.0},
+		Transform::from_translation(Vec3::new(x, y, 0.0)),
+		Status {effects: Vec::new()},
+	)).current_entity().unwrap();
+	match role { Role::Player(name) => {
+		commands.insert_one(entity, Player { name });
+		commands.spawn(()).with(Parent(entity))
+		},
 		Role::Boundary(info) => commands.insert_one(entity, Boundary { info }),
 		Role::CelestialBody(form) => commands.insert_one(entity, CelestialBody { form }),
-		Role::Shape(id) => commands.insert_one(entity, Shape {id})};
-	commands.insert(entity, (
-			Thrust {x: 0.0, y: 0.0},
-			Transform::from_translation(Vec3::new(x, y, 0.0)),
-			rigid_body_builder.translation(x, y).user_data(entity.to_bits() as u128),
-			collider_builder
-		)
-	);
+		Role::Shape(id) => commands.insert_one(entity, Shape {id}),
+	};
+	commands.insert_one(entity, rigid_body_builder.translation(x, y).user_data(entity.to_bits() as u128));
+	commands.spawn((collider_builder.user_data(true as u128),)).with(Parent(entity));
 	entity
 }
 
@@ -46,39 +49,18 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 	create_entity(commands, Role::Boundary("Top".to_string()), 0.0, 0.0,
 				  RigidBodyBuilder::new_static(),
 				  ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0)).restitution(INIT_RESTITUTION));
-	// commands.spawn((
-	// 	Boundary,
-	// 	RigidBodyBuilder::new_static(),
-	// 	ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(MAP_WIDTH, 0.0))
-	// 		.restitution(INIT_RESTITUTION),
-	// ));
+
 	create_entity(commands, Role::Boundary("Left".to_string()), 0.0, 0.0,
 				  RigidBodyBuilder::new_static(),
 				  ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
-	// commands.spawn((
-	// 	Boundary,
-	// 	RigidBodyBuilder::new_static(),
-	// 	ColliderBuilder::segment(Point2::new(0.0, 0.0), Point2::new(0.0, MAP_HEIGHT))
-	// 		.restitution(INIT_RESTITUTION),
-	// ));
+
 	create_entity(commands, Role::Boundary("Right".to_string()), 0.0, 0.0,
 				  RigidBodyBuilder::new_static(),
 				  ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
-	// commands.spawn((
-	// 	Boundary,
-	// 	RigidBodyBuilder::new_static(),
-	// 	ColliderBuilder::segment(Point2::new(MAP_WIDTH, 0.0), Point2::new(MAP_WIDTH, MAP_HEIGHT))
-	// 		.restitution(INIT_RESTITUTION),
-	// ));
+
 	create_entity(commands, Role::Boundary("Bottom".to_string()), 0.0, 0.0,
 				  RigidBodyBuilder::new_static(),
 				  ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT)).restitution(INIT_RESTITUTION));
-	// commands.spawn((
-	// 	Boundary,
-	// 	RigidBodyBuilder::new_static(),
-	// 	ColliderBuilder::segment(Point2::new(0.0, MAP_HEIGHT), Point2::new(MAP_WIDTH, MAP_HEIGHT))
-	// 		.restitution(INIT_RESTITUTION),
-	// ));
 
 	// Random stuffs.
 	for _ in 0..100 {
@@ -87,13 +69,6 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS, false);
 		let collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
 		create_entity(commands, Role::Shape(0), x, y, body, collider);
-		// commands.spawn((
-		// 	Shape { id: 0 },
-		// 	Thrust { x: 0.0, y: 0.0 },
-		// 	Transform::from_translation(Vec3::new(x, y, 0.0)),
-		// 	body,
-		// 	collider,
-		// ));
 	}
 
 	create_entity(commands, Role::CelestialBody("Planet".to_string()),
@@ -108,12 +83,6 @@ pub fn setup(commands: &mut Commands, mut configuration: ResMut<RapierConfigurat
 				  5970.00436, 4756.91247,
 				  RigidBodyBuilder::new_dynamic().mass(CELESTIAL_MASS, false).linvel(46.62036850, 43.23657300),
 				  ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION));
-	// commands.spawn((
-	// 	CelestialBody { form: "".to_string() },
-	// 	Transform::identity(),
-	// 	RigidBodyBuilder::new_static().translation(2000.0, 2000.0).mass(CELESTIAL_MASS, false),
-	// 	ColliderBuilder::ball(CELESTIAL_RADIUS).restitution(INIT_RESTITUTION),
-	// ));
 }
 
 pub fn create_player(
@@ -128,14 +97,6 @@ pub fn create_player(
 		let body = RigidBodyBuilder::new_dynamic().translation(x, y).mass(INIT_MASS * 100.0, false);
 		let collider = ColliderBuilder::ball(INIT_RADIUS).restitution(INIT_RESTITUTION);
 		let entity = create_entity(commands, Role::Player(event.name.clone()), x, y,body, collider);
-		// commands.spawn((
-		// 	Player { name: event.name.clone() },
-		// 	Thrust { x: 0.0, y: 0.0 },
-		// 	Transform::from_translation(Vec3::new(x, y, 0.0)),
-		// 	body,
-		// 	collider,
-		// ));
-		// let entity = commands.current_entity().unwrap();
 		game_state.sessions.insert(entity, event.session.clone());
 		event.sender.send(entity).unwrap();
 		println!("Player {} (#{}) joined the game.", event.name, entity.id());
