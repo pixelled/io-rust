@@ -1,5 +1,3 @@
-use bevy_rapier2d::rapier::na::Vector2;
-
 pub enum Role {
 	Player(String),
 	Boundary(String),

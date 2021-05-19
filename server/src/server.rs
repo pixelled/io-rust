@@ -1,12 +1,12 @@
 use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer};
 use crate::WsSession;
 use actix::Addr;
-use bevy::ecs::Entity;
 use futures::channel::mpsc::UnboundedSender;
 use futures::channel::oneshot::Sender;
 use game_shared::PlayerState;
 use std::collections::HashMap;
 use std::time::Instant;
+use bevy::ecs::entity::Entity;
 
 pub struct GameServer {
 	pub(crate) start_time: Instant,

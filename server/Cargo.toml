@@ -13,6 +13,6 @@ actix-web = "3.3"
 actix-web-actors = "3.0"
 actix-files = "0.4"
 futures = "0.3"
-bevy = "0.4"
+bevy = "0.5"
 rand = "0.8"
-bevy_rapier2d = { version = "0.7", features = [ "simd-stable" ] }
+bevy_rapier2d = { version = "0.10", features = [ "simd-stable" ] }

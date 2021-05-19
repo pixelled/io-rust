@@ -1,10 +1,11 @@
 use crate::WsSession;
 use actix::Addr;
 use bevy::app::Events;
-use bevy::ecs::{Entity, ResMut};
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::oneshot::Sender;
 use game_shared::PlayerState;
+use bevy::ecs::system::ResMut;
+use bevy::ecs::entity::Entity;
 
 pub struct EventListener<T>(pub UnboundedReceiver<T>);
 

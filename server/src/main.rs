@@ -8,10 +8,14 @@ use actix_web_actors::ws;
 use crate::event::{ChangeMovement, CreatePlayer, EventListener, RemovePlayer};
 use crate::server::{GameProxy, GameServer};
 use bevy::app::ScheduleRunnerSettings;
-use bevy::ecs::{Entity, IntoSystem};
 use bevy::MinimalPlugins;
 use bevy_rapier2d::physics::RapierPhysicsPlugin;
 use game_shared::{Operation, ViewSnapshot};
+use bevy::ecs::system::IntoSystem;
+use bevy::ecs::entity::Entity;
+use bevy::ecs::schedule::SystemSet;
+use bevy::core::FixedTimestep;
+use bevy_rapier2d::prelude::NoUserData;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -114,6 +118,12 @@ async fn index(
 	res
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+enum GameState {
+	Playing,
+	GameOver,
+}
+
 #[actix_web::main]
 async fn main() {
 	let (s1, r1) = futures::channel::mpsc::unbounded();
@@ -123,23 +133,26 @@ async fn main() {
 	futures::future::join(
 		async {
 			bevy::prelude::App::build()
-				.add_resource(ScheduleRunnerSettings::run_loop(TICK_TIME))
 				.add_plugins(MinimalPlugins)
-				.add_plugin(RapierPhysicsPlugin)
+				.add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
 				.add_event::<CreatePlayer>()
 				.add_event::<RemovePlayer>()
 				.add_event::<ChangeMovement>()
-				.add_resource(GameServer::new())
-				.add_resource(EventListener(r1))
-				.add_resource(EventListener(r2))
-				.add_resource(EventListener(r3))
-				.add_startup_system(system::setup.system())
-				.add_system(event::trigger_events.system())
-				.add_system(system::remove_player.system())
-				.add_system(system::create_player.system())
-				.add_system(system::change_movement.system())
-				.add_system(system::next_frame.system())
-				.add_system(system::extract_render_state.system())
+				.add_state(GameState::Playing)
+				.add_system_set(SystemSet::on_enter(GameState::Playing).with_system(system::setup.system()))
+				.insert_resource(GameServer::new())
+				.insert_resource(EventListener(r1))
+				.insert_resource(EventListener(r2))
+				.insert_resource(EventListener(r3))
+				.add_system_set(SystemSet::on_update(GameState::Playing)
+					.with_run_criteria(FixedTimestep::step(TICK_TIME.as_secs_f64()))
+					.with_system(event::trigger_events.system())
+					.with_system(system::create_player.system())
+					.with_system(system::remove_player.system())
+					.with_system(system::change_movement.system())
+					.with_system(system::next_frame.system())
+					.with_system(system::extract_render_state.system())
+				)
 				//.add_system(system::collisions.system())
 				.run();
 		},
