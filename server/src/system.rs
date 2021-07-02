@@ -5,7 +5,7 @@ use crate::{View};
 use bevy::app::{EventReader, Events};
 use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType,  CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y};
 use rand::Rng;
-use bevy_rapier2d::na::{Point2, Isometry, Translation, Rotation2, Vector2};
+use bevy_rapier2d::na::Vector2;
 use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, RigidBodyBundle, ColliderBundle, RigidBodyPositionSync};
 use bevy_rapier2d::rapier::geometry::{ContactEvent, ColliderShape, ColliderMaterial, ColliderMassProps};
 use bevy::prelude::*;
@@ -35,14 +35,14 @@ fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body
 		Role::Shape(id) => commands.entity(entity).insert(Shape {id}),
 	};
 	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider)
-		.insert(RigidBodyPositionSync::Discrete);;
+		.insert(RigidBodyPositionSync::Discrete);
 	// commands.entity(entity).insert(rigid_body_builder.translation(x, y).user_data(entity.to_bits() as u128));
 	// commands.spawn_bundle((collider_builder.user_data(true as u128),)).with(Parent(entity));
 
 	entity
 }
 
-/** Create a segmented-shape boundary */
+/// Create a segmented-shape boundary centered at (`x`, `y`).
 fn create_seg_boundary(commands: &mut Commands, x: Vec2, y: Vec2) {
 	let entity = commands.spawn_bundle((
 		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
@@ -60,10 +60,11 @@ fn create_seg_boundary(commands: &mut Commands, x: Vec2, y: Vec2) {
 		},
 		..Default::default()
 	};
-	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider);
+	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider)
+		.insert(Boundary { info: "Seg".to_string() });
 }
 
-/** Create a planet. */
+/// Create a planet centered at (`x`, `y`) with `linvel`.
 fn create_planet(commands: &mut Commands, x: f32, y: f32, linvel: Vec2) {
 	let entity = commands.spawn_bundle((
 		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
@@ -86,10 +87,11 @@ fn create_planet(commands: &mut Commands, x: f32, y: f32, linvel: Vec2) {
 		..Default::default()
 	};
 	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider)
-		.insert(RigidBodyPositionSync::Discrete);
+		.insert(RigidBodyPositionSync::Discrete)
+		.insert(CelestialBody { form: "planet".to_string() });
 }
 
-/** Basic setup at the beginning. */
+/// Basic setup at the beginning.
 pub fn setup(mut commands: Commands, mut configuration: ResMut<RapierConfiguration>) {
 	let mut rng = rand::thread_rng();
 
@@ -128,6 +130,7 @@ pub fn setup(mut commands: Commands, mut configuration: ResMut<RapierConfigurati
 	create_planet(&mut commands, 5970.00436, 4756.91247, Vec2::new(46.62036850, 43.23657300));
 }
 
+/// Create players for a stream of [CreatePlayer] `events`.
 pub fn create_player(
 	mut commands: Commands,
 	mut events: ResMut<Events<CreatePlayer>>,
@@ -189,7 +192,7 @@ pub fn remove_player(
 
 pub fn next_frame(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<CelestialBody>>,
 				  mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), Or<(With<Player>, With<Shape>, With<CelestialBody>)>>) {
-	for (thrust, obj_transform, mut obj_forces, obj_mprops) in object_bodies.iter_mut() {
+	/*for (thrust, obj_transform, mut obj_forces, obj_mprops) in object_bodies.iter_mut() {
 		let mut forces = Vector2::new(thrust.x, thrust.y);
 		let obj_mass = obj_mprops.local_mprops.inv_mass;
 		// Compute gravitational forces.
@@ -203,7 +206,7 @@ pub fn next_frame(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), Wit
 			forces += GRAVITY_CONST *  cb_mass * obj_mass * disp2 / disp2.norm().powi(3);
 		}
 		obj_forces.force = forces;
-	}
+	}*/
 }
 
 /*pub fn next_frame(

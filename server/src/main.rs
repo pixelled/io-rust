@@ -7,7 +7,6 @@ use actix_web_actors::ws;
 
 use crate::event::{ChangeMovement, CreatePlayer, EventListener, RemovePlayer};
 use crate::server::{GameProxy, GameServer};
-use bevy::app::ScheduleRunnerSettings;
 use bevy::MinimalPlugins;
 use bevy_rapier2d::physics::RapierPhysicsPlugin;
 use game_shared::{Operation, ViewSnapshot};
