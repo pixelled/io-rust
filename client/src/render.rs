@@ -5,6 +5,7 @@ use piet_web::WebRenderContext;
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// The scene ready for interpolation.
 pub struct RenderState {
 	pub time: Duration,
 	pub self_pos: Position,
@@ -13,6 +14,7 @@ pub struct RenderState {
 	pub celestial_pos: HashMap<u64, CelestialView>,
 }
 
+/// The interpolated scene ready for rendering.
 pub struct FinalView {
 	pub self_pos: Position,
 	pub players: Vec<PlayerView>,
@@ -33,11 +35,13 @@ impl From<ViewSnapshot> for RenderState {
 	}
 }
 
+/// Every object that displays on the canvas should implement this trait.
 pub trait Render {
 	fn render(&self, ctx: &mut WebRenderContext);
 }
 
 impl Render for PlayerView {
+	/// Render Players.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let x = self.pos.x as f64;
 		let y = self.pos.y as f64;
@@ -48,7 +52,7 @@ impl Render for PlayerView {
 		piet_ctx.stroke(&shape, &brush1, 5.0);
 
 		// Render shield.
-		let shape = CircleSegment::new((x, y), 45.0, 40.0, self.ori as f64 - 0.85, 1.7);
+		let shape = CircleSegment::new((x, y), 45.0, 40.0, self.ori as f64, 1.7);
 		piet_ctx.stroke(&shape, &brush, 5.0);
 
 		// Render text.
@@ -64,6 +68,7 @@ impl Render for PlayerView {
 }
 
 impl Render for StaticView {
+	/// Render non-player objects.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let pt = (self.pos.x as f64, self.pos.y as f64);
 		let shape = Circle::new(pt, INIT_RADIUS as f64);
@@ -73,6 +78,7 @@ impl Render for StaticView {
 }
 
 impl Render for CelestialView {
+	/// Render celestial bodies.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let pt = (self.pos.x as f64, self.pos.y as f64);
 		let shape = Circle::new(pt, CELESTIAL_RADIUS as f64);
@@ -82,6 +88,7 @@ impl Render for CelestialView {
 }
 
 impl Render for FinalView {
+	/// Render the final scene.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		piet_ctx.clear(Color::rgb8(36, 39, 44));
 
@@ -110,6 +117,7 @@ pub struct MiniMap {
 }
 
 impl Render for MiniMap {
+	/// Render the minimap.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let map_x = self.pos.x as f64;
 		let map_y = self.pos.y as f64;
@@ -147,6 +155,7 @@ impl Render for MiniMap {
 trait Interpolate: Sized {
 	type Output;
 
+	/// Interpolate between `self` and `other` with an interval of `t`.
 	fn interp_with(&self, other: &Self, t: f32) -> Self::Output;
 }
 
@@ -226,18 +235,22 @@ impl Interpolator {
 		Interpolator { base_time: prev.time.as_millis() as f64 - now, prev, next }
 	}
 
+	/// Interpolate based on `time` and compute offsets based on the size of `canvas`.
 	pub fn interpolate(&self, time: f64, canvas: &web_sys::HtmlCanvasElement) -> FinalView {
 		let t = (self.base_time + time - self.prev.time.as_millis() as f64) as f32
 			/ (self.next.time - self.prev.time).as_millis() as f32;
 		let mut view = self.prev.interp_with(&self.next, t);
 
+		// Compute positions relative to the canvas (centered at the player's position) before rendering.
 		view.map.pos = Position { x: canvas.width() as f32 - 100.0 , y: canvas.height() as f32 - 100.0 };
 		view.celestial_pos.iter().filter(|cele_view| {
 			(view.self_pos.x - cele_view.pos.x).abs() < VIEW_X && (view.self_pos.y - cele_view.pos.y).abs() < VIEW_Y
 		});
 
+		// Compute the offsets between relative and absolute positions.
 		let offset_x = view.self_pos.x - canvas.width() as f32 / 2.0;
 		let offset_y = view.self_pos.y - canvas.height() as f32 / 2.0;
+
 		for celestial in view.celestial_pos.iter_mut() {
 			celestial.pos.x -= offset_x;
 			celestial.pos.y -= offset_y;

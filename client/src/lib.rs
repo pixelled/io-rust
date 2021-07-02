@@ -98,6 +98,7 @@ pub async fn start() {
 		.dyn_into::<web_sys::CanvasRenderingContext2d>()
 		.unwrap();
 
+	// Create an input box with a `keydown` event listener bounded to it.
 	let name_input = document.get_element_by_id("nameInput").unwrap();
 	let name_input: web_sys::HtmlInputElement =
 		name_input.dyn_into::<web_sys::HtmlInputElement>().map_err(|_| ()).unwrap();
@@ -111,6 +112,7 @@ pub async fn start() {
 		}
 	});
 
+	// Add an event listener for `keydown` event.
 	let control_state = Mutable::new(ControlState::new());
 	let control_state1 = control_state.clone();
 	EventListener::new(&document, "keydown", move |event| {
@@ -125,6 +127,8 @@ pub async fn start() {
 		}
 	})
 	.forget();
+
+	// Add an event listener for `keyup` event.
 	let control_state2 = control_state.clone();
 	EventListener::new(&document, "keyup", move |event| {
 		let event: &KeyboardEvent = event.dyn_ref().unwrap_throw();
@@ -139,6 +143,7 @@ pub async fn start() {
 	})
 	.forget();
 
+	// Add an event listener for `mousemove` event.
 	// TODO calculate degree based on position
 	let control_state3 = control_state.clone();
 	let center_x = canvas.width() / 2;

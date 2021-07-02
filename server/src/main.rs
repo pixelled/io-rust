@@ -149,7 +149,7 @@ async fn main() {
 					.with_system(system::create_player.system())
 					.with_system(system::remove_player.system())
 					.with_system(system::change_movement.system())
-					.with_system(system::next_frame.system())
+					.with_system(system::simulate.system())
 					.with_system(system::extract_render_state.system())
 				)
 				//.add_system(system::collisions.system())

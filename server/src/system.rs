@@ -15,10 +15,11 @@ use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBod
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
-const INIT_DENSITY: f32 = 1.0;
+const INIT_DENSITY: f32 = 0.0008;
+const PLAYER_DENSITY: f32 = 0.0008;
 const CELESTIAL_MASS: f32 = 10000000.0;
-const CELESTIAL_DENSITY: f32 = 100000.0;
-const GRAVITY_CONST: f32 = 1.0;
+const CELESTIAL_DENSITY: f32 = 318.3;
+const GRAVITY_CONST: f32 = 20.0;
 
 fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
 	let entity = commands.spawn_bundle((
@@ -67,6 +68,7 @@ fn create_seg_boundary(commands: &mut Commands, x: Vec2, y: Vec2) {
 /// Create a planet centered at (`x`, `y`) with `linvel`.
 fn create_planet(commands: &mut Commands, x: f32, y: f32, linvel: Vec2) {
 	let entity = commands.spawn_bundle((
+		Thrust {x: 0.0, y: 0.0},
 		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
 	)).id();
 	let rigid_body = RigidBodyBundle {
@@ -142,12 +144,12 @@ pub fn create_player(
 		let y = rng.gen_range(0.4 * MAP_HEIGHT .. 0.6 * MAP_HEIGHT);
 
 		let rigid_body = RigidBodyBundle {
-			position: Vec2::new(x, y).into(),
+			position: (Vec2::new(x, y), 0.0).into(),
 			..Default::default()
 		};
 		let collider = ColliderBundle {
 			shape: ColliderShape::ball(INIT_RADIUS),
-			mass_properties: ColliderMassProps::Density(INIT_DENSITY * 100.0),
+			mass_properties: ColliderMassProps::Density(PLAYER_DENSITY),
 			material: ColliderMaterial {
 				restitution: INIT_RESTITUTION,
 				..Default::default()
@@ -190,51 +192,29 @@ pub fn remove_player(
 	}
 }
 
-pub fn next_frame(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<CelestialBody>>,
-				  mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), Or<(With<Player>, With<Shape>, With<CelestialBody>)>>) {
-	/*for (thrust, obj_transform, mut obj_forces, obj_mprops) in object_bodies.iter_mut() {
+/// Simulate gravitational forces exerted by `celestial_bodies` on `object_bodies`.
+/// TODO: inclued both Player and Shape (the performance behaves strangely?) and remove Thrust.
+pub fn simulate(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<CelestialBody>>,
+				mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), With<Player>>
+				/*mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), Or<(With<Player>, With<Shape>, With<CelestialBody>)>>*/) {
+	for (thrust, obj_transform, mut obj_forces, obj_mprops) in object_bodies.iter_mut() {
 		let mut forces = Vector2::new(thrust.x, thrust.y);
-		let obj_mass = obj_mprops.local_mprops.inv_mass;
+		let obj_mass = 1.0 / obj_mprops.local_mprops.inv_mass;
 		// Compute gravitational forces.
 		for (cb_transform, cb_mprops) in celestial_bodies.iter() {
-			let cb_mass = cb_mprops.local_mprops.inv_mass;
+			let cb_mass = 1.0 / cb_mprops.local_mprops.inv_mass;
 			let disp3 = cb_transform.translation - obj_transform.translation;
-			let disp2 = Vector2::new(disp3.x, disp3.y);
+			let disp2: Vector2<f32> = Vector2::new(disp3.x, disp3.y);
 			if disp2.norm() == 0.0 {
 				continue;
 			}
-			forces += GRAVITY_CONST *  cb_mass * obj_mass * disp2 / disp2.norm().powi(3);
+			forces += GRAVITY_CONST * cb_mass * obj_mass * disp2 / disp2.norm().powi(3);
 		}
+		println!("{:?}", obj_transform.rotation.to_axis_angle());
+		// Apply forces.
 		obj_forces.force = forces;
-	}*/
-}
-
-/*pub fn next_frame(
-	mut rigid_body_set: ResMut<RigidBodySet>,
-	celestial_query: Query<(&CelestialBody, &RigidBodyHandleComponent, &Transform)>,
-	// player_query: Query<(&Thrust, &RigidBodyHandleComponent, &Transform), With<Player>>,
-	object_query: Query<
-		(&Thrust, &RigidBodyHandleComponent, &Transform),
-		Or<(With<Player>, With<Shape>, With<CelestialBody>)>,
-	>,
-) {
-	for (thrust, object_handle, object_transform) in object_query.iter() {
-		let mut force = Vector2::new(thrust.x, thrust.y);
-		let object_body = rigid_body_set.get(object_handle.handle()).unwrap();
-		let object_mass = object_body.mass();
-		for (_, celestial_handle, celestial_transform) in celestial_query.iter() {
-			let celestial_mass = rigid_body_set.get(celestial_handle.handle()).unwrap().mass();
-			let displacement_3d = celestial_transform.translation - object_transform.translation;
-			let displacement: Vector2<f32> = Vector2::new(displacement_3d.x, displacement_3d.y);
-			if displacement.norm() == 0.0 {
-				continue;
-			}
-			force += GRAVITY_CONST * object_mass * celestial_mass * displacement
-				/ displacement.norm().powi(3);
-		}
-		rigid_body_set.get_mut(object_handle.handle()).unwrap().apply_force(force, true);
 	}
-}*/
+}
 
 /*pub fn collisions(events: ResMut<EventQueue>, collider_set: Res<ColliderSet>, mut rigid_body_set: ResMut<RigidBodySet>) {
 	while let Ok(contact_event) = events.contact_events.pop() {
@@ -267,7 +247,7 @@ pub fn extract_render_state(
 					PlayerView {
 						name: player.name.clone(),
 						pos: Position { x: pos.translation.x, y: pos.translation.y },
-						ori: 0.0,
+						ori: pos.rotation.to_axis_angle().1,
 					},
 				)
 			})
