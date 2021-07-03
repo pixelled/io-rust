@@ -1,8 +1,18 @@
+use bevy::ecs::prelude::Entity;
+
 pub enum Role {
 	Player(String),
 	Boundary(String),
 	CelestialBody(String),
 	Shape(i8),
+}
+
+pub struct ShieldID {
+	pub entity: Entity,
+}
+
+pub enum ShieldType {
+	Circle,
 }
 
 pub struct Player {

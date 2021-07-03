@@ -3,24 +3,29 @@ use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer};
 use crate::server::GameServer;
 use crate::{View};
 use bevy::app::{EventReader, Events};
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType,  CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType, CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y, SHIELD_RADIUS, ShieldView};
 use rand::Rng;
 use bevy_rapier2d::na::Vector2;
-use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, RigidBodyBundle, ColliderBundle, RigidBodyPositionSync};
+use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, RigidBodyBundle, ColliderBundle, RigidBodyPositionSync, JointBuilderComponent};
 use bevy_rapier2d::rapier::geometry::{ContactEvent, ColliderShape, ColliderMaterial, ColliderMassProps};
 use bevy::prelude::*;
 use bevy::ecs::system::Command;
 use bevy_rapier2d::rapier::geometry::ColliderMassProps::MassProperties;
-use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps};
+use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint};
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
 const INIT_DENSITY: f32 = 0.0008;
+
 const PLAYER_DENSITY: f32 = 0.0008;
+const SHIELD_DENSITY: f32 = 0.000008;
+
 const CELESTIAL_MASS: f32 = 10000000.0;
 const CELESTIAL_DENSITY: f32 = 318.3;
+
 const GRAVITY_CONST: f32 = 20.0;
 
+/// TODO: remove this one and generalize as trait?
 fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
 	let entity = commands.spawn_bundle((
 		Thrust {x: 0.0, y: 0.0},
@@ -40,6 +45,19 @@ fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body
 	// commands.entity(entity).insert(rigid_body_builder.translation(x, y).user_data(entity.to_bits() as u128));
 	// commands.spawn_bundle((collider_builder.user_data(true as u128),)).with(Parent(entity));
 
+	entity
+}
+
+fn create_shield(commands: &mut Commands, shield_type: ShieldType, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
+	let entity = commands
+		.spawn_bundle((
+			shield_type,
+			Transform::from_translation(Vec3::new(x, y, 0.0)),
+		))
+		.insert_bundle(rigid_body)
+		.insert_bundle(collider)
+		.insert(RigidBodyPositionSync::Discrete)
+		.id();
 	entity
 }
 
@@ -143,6 +161,7 @@ pub fn create_player(
 		let x = rng.gen_range(0.4 * MAP_WIDTH .. 0.6 * MAP_WIDTH);
 		let y = rng.gen_range(0.4 * MAP_HEIGHT .. 0.6 * MAP_HEIGHT);
 
+		// The entity of player's body.
 		let rigid_body = RigidBodyBundle {
 			position: (Vec2::new(x, y), 0.0).into(),
 			..Default::default()
@@ -156,11 +175,34 @@ pub fn create_player(
 			},
 			..Default::default()
 		};
+		let entity_body = create_entity(&mut commands, Role::Player(event.name.clone()), x, y, rigid_body, collider);
 
-		let entity = create_entity(&mut commands, Role::Player(event.name.clone()), x, y, rigid_body, collider);
-		game_state.sessions.insert(entity, event.session.clone());
-		event.sender.send(entity).unwrap();
-		println!("Player {} (#{}) joined the game.", event.name, entity.id());
+		// The entity of shield.
+		let x_shield = x + 40.0;
+		let y_shield = y;
+		let rigid_body = RigidBodyBundle {
+			position: Vec2::new(x_shield, y_shield).into(),
+			..Default::default()
+		};
+		let collider = ColliderBundle {
+			shape: ColliderShape::ball(SHIELD_RADIUS),
+			mass_properties: ColliderMassProps::Density(SHIELD_DENSITY),
+			material: ColliderMaterial {
+				restitution: INIT_RESTITUTION,
+				..Default::default()
+			},
+			..Default::default()
+		};
+		let entity_shield = create_shield(&mut commands, ShieldType::Circle, x_shield, y_shield, rigid_body, collider);
+
+		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } );
+
+		let joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(40.0, 0.0).into());
+		commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
+
+		game_state.sessions.insert(entity_body, event.session.clone());
+		event.sender.send(entity_body).unwrap();
+		println!("Player {} (#{} #{}) joined the game.", event.name, entity_body.id(), entity_shield.id());
 	}
 }
 
@@ -193,7 +235,7 @@ pub fn remove_player(
 }
 
 /// Simulate gravitational forces exerted by `celestial_bodies` on `object_bodies`.
-/// TODO: inclued both Player and Shape (the performance behaves strangely?) and remove Thrust.
+/// TODO: include both `Player` and `Shape` (the performance behaves strangely?) and remove Thrust.
 pub fn simulate(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<CelestialBody>>,
 				mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), With<Player>>
 				/*mut object_bodies: Query<(&Thrust, &Transform, &mut RigidBodyForces, &RigidBodyMassProps), Or<(With<Player>, With<Shape>, With<CelestialBody>)>>*/) {
@@ -210,7 +252,6 @@ pub fn simulate(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<
 			}
 			forces += GRAVITY_CONST * cb_mass * obj_mass * disp2 / disp2.norm().powi(3);
 		}
-		println!("{:?}", obj_transform.rotation.to_axis_angle());
 		// Apply forces.
 		obj_forces.force = forces;
 	}
@@ -229,27 +270,47 @@ pub fn simulate(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<
 
 pub fn extract_render_state(
 	game_state: Res<GameServer>,
-	query: Query<(Entity, &Player, &Transform)>,
+	query: Query<(Entity, &Player, &Transform, &ShieldID)>,
+	shields: Query<(Entity, &ShieldType, &Transform)>,
 	obj_query: Query<(Entity, &Shape, &Transform)>,
 	celestial_query: Query<(Entity, &CelestialBody, &Transform)>,
 ) {
-	for (entity, _player, self_pos) in query.iter() {
+	for (entity, _player, self_pos, _shield_id) in query.iter() {
 		// Collect players' positions.
 		let positions = query
 			.iter()
-			.filter(|(_, _, pos)| {
-				(self_pos.translation.x - pos.translation.x).abs() < VIEW_X
+			.filter_map(|(entity, player, pos, shield_id)| {
+				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X
 					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
+				{
+					Some((
+						entity.to_bits(),
+						PlayerView {
+							name: player.name.clone(),
+							pos: Position { x: pos.translation.x, y: pos.translation.y },
+							ori: { let (axis, angle) = pos.rotation.to_axis_angle(); axis[2] * angle },
+							shield_id: shield_id.entity.to_bits(),
+						}
+					))
+				} else {
+					None
+				}
 			})
-			.map(|(entity, player, pos)| {
-				(
-					entity.to_bits(),
-					PlayerView {
-						name: player.name.clone(),
-						pos: Position { x: pos.translation.x, y: pos.translation.y },
-						ori: pos.rotation.to_axis_angle().1,
-					},
-				)
+			.collect();
+
+		let shield_info = shields
+			.iter()
+			.filter_map(|(entity, _, pos)| {
+				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X
+					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
+				{
+					Some((
+						entity.to_bits(),
+						ShieldView { pos: Position { x: pos.translation.x, y: pos.translation.y } },
+					))
+				} else {
+					None
+				}
 			})
 			.collect();
 
@@ -285,6 +346,7 @@ pub fn extract_render_state(
 			time: game_state.start_time.elapsed(),
 			self_pos,
 			players: positions,
+			shield_info,
 			static_pos,
 			celestial_pos,
 		};

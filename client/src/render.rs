@@ -1,15 +1,23 @@
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT, VIEW_X, VIEW_Y};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT, VIEW_X, VIEW_Y, ShieldView, SHIELD_RADIUS};
 use piet::kurbo::{Circle, CircleSegment, Rect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
 use std::collections::HashMap;
 use std::time::Duration;
 
+#[derive(Clone)]
+pub struct PlayerState {
+	pub name: String,
+	pub pos: Position,
+	pub ori: f32,
+	pub shield_pos: Position,
+}
+
 /// The scene ready for interpolation.
 pub struct RenderState {
 	pub time: Duration,
 	pub self_pos: Position,
-	pub players: HashMap<u64, PlayerView>,
+	pub players: HashMap<u64, PlayerState>,
 	pub static_pos: HashMap<u64, StaticView>,
 	pub celestial_pos: HashMap<u64, CelestialView>,
 }
@@ -17,7 +25,7 @@ pub struct RenderState {
 /// The interpolated scene ready for rendering.
 pub struct FinalView {
 	pub self_pos: Position,
-	pub players: Vec<PlayerView>,
+	pub players: Vec<PlayerState>,
 	pub static_pos: Vec<StaticView>,
 	pub celestial_pos: Vec<CelestialView>,
 	pub map: MiniMap,
@@ -28,7 +36,18 @@ impl From<ViewSnapshot> for RenderState {
 		RenderState {
 			time: view.time,
 			self_pos: view.self_pos,
-			players: view.players.into_iter().collect(),
+			// Convert `PlayerView` into `PlayerState` to include shields' info.
+			players: {
+				let shields: HashMap<u64, ShieldView> = view.shield_info.into_iter().collect();
+				view.players.into_iter().map(|(id, player_view)| {
+					(id, PlayerState {
+						name: player_view.name,
+						pos: player_view.pos,
+						ori: player_view.ori,
+						shield_pos: shields.get(&player_view.shield_id).expect("No shields match this player.").pos,
+					})
+				}).collect()
+			},
 			static_pos: view.static_pos.into_iter().collect(),
 			celestial_pos: view.celestial_pos.into_iter().collect(),
 		}
@@ -40,11 +59,13 @@ pub trait Render {
 	fn render(&self, ctx: &mut WebRenderContext);
 }
 
-impl Render for PlayerView {
+impl Render for PlayerState {
 	/// Render Players.
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		let x = self.pos.x as f64;
 		let y = self.pos.y as f64;
+
+		// Render body.
 		let shape = Circle::new((x, y), INIT_RADIUS as f64);
 		let brush = piet_ctx.solid_brush(Color::SILVER);
 		piet_ctx.fill(&shape, &brush);
@@ -52,8 +73,11 @@ impl Render for PlayerView {
 		piet_ctx.stroke(&shape, &brush1, 5.0);
 
 		// Render shield.
-		let shape = CircleSegment::new((x, y), 45.0, 40.0, self.ori as f64, 1.7);
-		piet_ctx.stroke(&shape, &brush, 5.0);
+		let x_shield = self.shield_pos.x;
+		let y_shield = self.shield_pos.y;
+		let shape = Circle::new((x_shield as f64, y_shield as f64), SHIELD_RADIUS as f64);
+		let brush = piet_ctx.solid_brush(Color::grey(0.7));
+		piet_ctx.fill(&shape, &brush);
 
 		// Render text.
 		let layout = piet_ctx
@@ -108,11 +132,11 @@ impl Render for FinalView {
 }
 
 pub struct MiniMap {
-	// Center position.
+	/// Center position.
 	pub pos: Position,
-	// Player position.
+	/// Player position.
 	pub self_pos: Position,
-	// Celestial position.
+	/// Celestial positions.
 	pub cele_views: Vec<CelestialView>,
 }
 
@@ -167,14 +191,15 @@ impl Interpolate for Position {
 	}
 }
 
-impl Interpolate for PlayerView {
-	type Output = PlayerView;
+impl Interpolate for PlayerState {
+	type Output = PlayerState;
 
-	fn interp_with(&self, other: &PlayerView, t: f32) -> PlayerView {
-		PlayerView {
+	fn interp_with(&self, other: &PlayerState, t: f32) -> PlayerState {
+		PlayerState {
 			name: other.name.clone(),
 			pos: self.pos.interp_with(&other.pos, t),
 			ori: other.ori,
+			shield_pos: self.shield_pos.interp_with(&other.shield_pos, t),
 		}
 	}
 }
@@ -262,6 +287,8 @@ impl Interpolator {
 		for player in view.players.iter_mut() {
 			player.pos.x -= offset_x;
 			player.pos.y -= offset_y;
+			player.shield_pos.x -= offset_x;
+			player.shield_pos.y -= offset_y;
 		}
 		view
 	}
