@@ -3,15 +3,16 @@ use crate::event::{ChangeMovement, CreatePlayer, RemovePlayer};
 use crate::server::GameServer;
 use crate::{View};
 use bevy::app::{EventReader, Events};
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType, CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y, SHIELD_RADIUS, ShieldView};
+use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, Status, EffectType, CELESTIAL_RADIUS, INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, VIEW_X, VIEW_Y, SHIELD_RADIUS, ShieldView, Ori};
 use rand::Rng;
 use bevy_rapier2d::na::Vector2;
-use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, RigidBodyBundle, ColliderBundle, RigidBodyPositionSync, JointBuilderComponent};
+use bevy_rapier2d::physics::{RapierConfiguration, RigidBodyHandleComponent, RigidBodyBundle, ColliderBundle, RigidBodyPositionSync, JointBuilderComponent, JointHandleComponent};
 use bevy_rapier2d::rapier::geometry::{ContactEvent, ColliderShape, ColliderMaterial, ColliderMassProps};
 use bevy::prelude::*;
 use bevy::ecs::system::Command;
 use bevy_rapier2d::rapier::geometry::ColliderMassProps::MassProperties;
-use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint};
+use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams};
+use bevy_rapier2d::rapier::na::{UnitVector2, Rotation, Rotation2, Unit, UnitQuaternion, UnitComplex, Complex};
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -29,6 +30,7 @@ const GRAVITY_CONST: f32 = 20.0;
 fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
 	let entity = commands.spawn_bundle((
 		Thrust {x: 0.0, y: 0.0},
+		Ori { deg: 0.0 },
 		Transform::from_translation(Vec3::new(x, y, 0.0)),
 		Status {effects: Vec::new()},
 	)).id();
@@ -197,7 +199,8 @@ pub fn create_player(
 
 		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } );
 
-		let joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(40.0, 0.0).into());
+		let mut joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(60.0, 0.0).into());
+		joint.configure_motor_velocity(20.0, 0.5);
 		commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
 
 		game_state.sessions.insert(entity_body, event.session.clone());
@@ -212,8 +215,8 @@ impl Command for ChangeMovement {
 		let mut thrust = world.get_mut::<Thrust>(self.player).expect("No component found.");
 		thrust.x = fx * 40000.0;
 		thrust.y = fy * 40000.0;
-		// let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
-		// ori.deg = self.state.ori;
+		let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
+		ori.deg = self.state.ori;
 	}
 }
 
@@ -231,6 +234,45 @@ pub fn remove_player(
 		commands.entity(event.player).despawn();
 		// game_state.sessions.remove(&event.player);
 		println!("Player (#{}) left the game.", event.player.id());
+	}
+}
+
+pub fn simulate_shield(mut joint_set: ResMut<JointSet>,
+					   players: Query<(&Transform, &Ori/*, &JointHandleComponent*/), With<Player>>,
+					   joints: Query<(&JointHandleComponent)>) {
+	/*for (body_transform, ori/*, joint_handle_component*/) in players.iter() {
+		// let joint_handle = joint_handle_component.handle();
+		// let joint = joint_set.get(joint_handle).unwrap();
+		// let joint: &BallJoint = joint.params.as_ball_joint().unwrap();
+		let (axis, angle) = body_transform.rotation.to_axis_angle();
+		/*println!("shield: {}", axis[2] * angle);
+		println!("cursor: {}", ori.deg);*/
+		// joint.configure_motor_velocity(10.0, 0.5);
+	}*/
+	/*println!("Sim on.");
+	for (joint_handle_component) in joints.iter() {
+		let joint_handle = joint_handle_component.handle();
+		let joint = joint_set.get_mut(joint_handle).unwrap();
+		match joint.params {
+			JointParams::BallJoint(mut ball_joint) => {
+				println!("before: {}", ball_joint.motor_target_vel);
+				ball_joint.configure_motor_velocity(30.0, 0.5);
+				println!("after: {}", ball_joint.motor_target_vel);
+				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);
+			},
+			_ => panic!(),
+		}
+	}*/
+	for (joint_handle, joint) in joint_set.iter_mut() {
+		match &mut joint.params {
+			JointParams::BallJoint(mut ball_joint) => {
+				println!("before: {}", ball_joint.motor_target_vel);
+				ball_joint.configure_motor_velocity(30.0, 0.5);
+				println!("after: {}", ball_joint.motor_target_vel);
+				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);
+			},
+			_ => panic!(),
+		}
 	}
 }
 
