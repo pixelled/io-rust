@@ -11,7 +11,7 @@ use bevy_rapier2d::rapier::geometry::{ContactEvent, ColliderShape, ColliderMater
 use bevy::prelude::*;
 use bevy::ecs::system::Command;
 use bevy_rapier2d::rapier::geometry::ColliderMassProps::MassProperties;
-use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams};
+use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams, RigidBodyPosition};
 use bevy_rapier2d::rapier::na::{UnitVector2, Rotation, Rotation2, Unit, UnitQuaternion, UnitComplex, Complex};
 
 const INIT_MASS: f32 = 1.0;
@@ -197,7 +197,8 @@ pub fn create_player(
 		};
 		let entity_shield = create_shield(&mut commands, ShieldType::Circle, x_shield, y_shield, rigid_body, collider);
 
-		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } );
+		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } )
+			.insert(Parent(entity_body));
 
 		let mut joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(60.0, 0.0).into());
 		joint.configure_motor_velocity(20.0, 0.5);
@@ -237,41 +238,23 @@ pub fn remove_player(
 	}
 }
 
-pub fn simulate_shield(mut joint_set: ResMut<JointSet>,
-					   players: Query<(&Transform, &Ori/*, &JointHandleComponent*/), With<Player>>,
-					   joints: Query<(&JointHandleComponent)>) {
-	/*for (body_transform, ori/*, joint_handle_component*/) in players.iter() {
-		// let joint_handle = joint_handle_component.handle();
-		// let joint = joint_set.get(joint_handle).unwrap();
-		// let joint: &BallJoint = joint.params.as_ball_joint().unwrap();
-		let (axis, angle) = body_transform.rotation.to_axis_angle();
-		/*println!("shield: {}", axis[2] * angle);
-		println!("cursor: {}", ori.deg);*/
-		// joint.configure_motor_velocity(10.0, 0.5);
-	}*/
-	/*println!("Sim on.");
-	for (joint_handle_component) in joints.iter() {
-		let joint_handle = joint_handle_component.handle();
-		let joint = joint_set.get_mut(joint_handle).unwrap();
-		match joint.params {
-			JointParams::BallJoint(mut ball_joint) => {
-				println!("before: {}", ball_joint.motor_target_vel);
-				ball_joint.configure_motor_velocity(30.0, 0.5);
-				println!("after: {}", ball_joint.motor_target_vel);
-				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);
-			},
-			_ => panic!(),
-		}
-	}*/
-	for (joint_handle, joint) in joint_set.iter_mut() {
-		match &mut joint.params {
-			JointParams::BallJoint(mut ball_joint) => {
-				println!("before: {}", ball_joint.motor_target_vel);
-				ball_joint.configure_motor_velocity(30.0, 0.5);
-				println!("after: {}", ball_joint.motor_target_vel);
-				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);
-			},
-			_ => panic!(),
+pub fn simulate_shield(players: Query<(&Transform, &Ori, &ShieldID), With<Player>>,
+					   mut shields: Query<(&Transform, &mut RigidBodyVelocity), Or<(With<ShieldType>, With<Player>)>>) {
+	for (body_transform, ori, shield_id) in players.iter() {
+		let (shield_transform, mut shield_rb_vel) = shields.get_mut(shield_id.entity).expect("Shield entity not found.");
+		let diff = shield_transform.translation - body_transform.translation;
+		let diff_ori = ori.deg - diff.y.atan2(diff.x);
+		let angle = std::f32::consts::PI;
+
+		if diff_ori.abs() < 0.1 {
+			shield_rb_vel.linvel = Vec2::new(0.0, 0.0).into();
+		} else {
+			if (diff_ori > 0.0 && diff_ori < angle) || diff_ori < -angle {
+				// Clockwise.
+				shield_rb_vel.linvel = Vec2::new(-diff.y * 10.0, diff.x * 10.0).into();
+			} else {
+				shield_rb_vel.linvel = Vec2::new(diff.y * 10.0, -diff.x * 10.0).into();
+			}
 		}
 	}
 }
