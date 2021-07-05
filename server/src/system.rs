@@ -238,22 +238,22 @@ pub fn remove_player(
 	}
 }
 
-pub fn simulate_shield(players: Query<(&Transform, &Ori, &ShieldID), With<Player>>,
-					   mut shields: Query<(&Transform, &mut RigidBodyVelocity), Or<(With<ShieldType>, With<Player>)>>) {
-	for (body_transform, ori, shield_id) in players.iter() {
+pub fn simulate_shield(players: Query<(&Transform, &Ori, &ShieldID, &RigidBodyVelocity), With<Player>>,
+					   mut shields: Query<(&Transform, &mut RigidBodyVelocity), (With<ShieldType>, Without<Player>)>) {
+	for (body_transform, ori, shield_id, player_vel) in players.iter() {
 		let (shield_transform, mut shield_rb_vel) = shields.get_mut(shield_id.entity).expect("Shield entity not found.");
 		let diff = shield_transform.translation - body_transform.translation;
 		let diff_ori = ori.deg - diff.y.atan2(diff.x);
 		let angle = std::f32::consts::PI;
 
 		if diff_ori.abs() < 0.1 {
-			shield_rb_vel.linvel = Vec2::new(0.0, 0.0).into();
+			shield_rb_vel.linvel = player_vel.linvel.clone();
 		} else {
 			if (diff_ori > 0.0 && diff_ori < angle) || diff_ori < -angle {
 				// Clockwise.
-				shield_rb_vel.linvel = Vec2::new(-diff.y * 10.0, diff.x * 10.0).into();
+				shield_rb_vel.linvel = Vec2::new(player_vel.linvel.x-diff.y * 10.0, player_vel.linvel.y + diff.x * 10.0).into();
 			} else {
-				shield_rb_vel.linvel = Vec2::new(diff.y * 10.0, -diff.x * 10.0).into();
+				shield_rb_vel.linvel = Vec2::new(player_vel.linvel.x + diff.y * 10.0, player_vel.linvel.y-diff.x * 10.0).into();
 			}
 		}
 	}
