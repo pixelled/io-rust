@@ -30,7 +30,7 @@ const GRAVITY_CONST: f32 = 20.0;
 fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
 	let entity = commands.spawn_bundle((
 		Thrust {x: 0.0, y: 0.0},
-		Ori { deg: 0.0 },
+		Ori { deg: 0.0, push: false },
 		Transform::from_translation(Vec3::new(x, y, 0.0)),
 		Status {effects: Vec::new()},
 	)).id();
@@ -218,7 +218,7 @@ impl Command for ChangeMovement {
 		thrust.y = fy * 40000.0;
 		let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
 		ori.deg = self.state.ori;
-
+		ori.push = self.state.push_shield;
 	}
 }
 
@@ -261,12 +261,13 @@ pub fn remove_player(
 }*/
 
 pub fn simulate_shield(mut joint_set: ResMut<JointSet>,
-					   players: Query<(&Transform, &Ori/*, &JointHandleComponent*/), With<Player>>,
+					   players: Query<(Entity, &Ori), With<Player>>,
 					   joints: Query<(&JointHandleComponent)>) {
 	for (joint_handle, joint) in joint_set.iter_mut() {
 		match &mut joint.params {
 			JointParams::PrismaticJoint(prismatic_joint) => {
 				// println!("before: {}", prismatic_joint.motor_target_vel);
+				let ori = players.get::<Ori>(prismatic_joint.entity1()).unwrap();
 				prismatic_joint.configure_motor_velocity(-10.0, 0.5);
 				// println!("after: {}", prismatic_joint.motor_target_vel);
 				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);

@@ -36,6 +36,7 @@ pub struct Position {
 pub struct Ori {
 	/// Radians.
 	pub deg: f32,
+	pub push: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
