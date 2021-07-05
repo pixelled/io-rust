@@ -26,11 +26,12 @@ struct ControlState {
 	down: bool,
 	right: bool,
 	cursor: (i32, i32),
+	mouse_down: bool,
 }
 
 impl ControlState {
 	pub fn new() -> Self {
-		ControlState { up: false, left: false, down: false, right: false, cursor: (0, 0) }
+		ControlState { up: false, left: false, down: false, right: false, cursor: (0, 0), mouse_down: false }
 	}
 
 	pub fn state(&self) -> PlayerState {
@@ -41,11 +42,12 @@ impl ControlState {
 		dy -= self.up as i32;
 		dy += self.down as i32;
 		if dx == 0 && dy == 0 {
-			PlayerState { dir: None, ori: (self.cursor.1 as f32).atan2(self.cursor.0 as f32) }
+			PlayerState { dir: None, ori: (self.cursor.1 as f32).atan2(self.cursor.0 as f32), push_shield: self.mouse_down }
 		} else {
 			PlayerState {
 				dir: Some((dy as f32).atan2(dx as f32)),
 				ori: (self.cursor.1 as f32).atan2(self.cursor.0 as f32),
+				push_shield: self.mouse_down,
 			}
 		}
 	}
@@ -80,6 +82,14 @@ impl ControlState {
 
 	pub fn release_right(&mut self) {
 		self.right = false;
+	}
+
+	pub fn mouse_down(&mut self) {
+		self.mouse_down = true;
+	}
+
+	pub fn mouse_up(&mut self) {
+		self.mouse_down = false;
 	}
 }
 
@@ -154,6 +164,20 @@ pub async fn start() {
 		state.cursor = (event.client_x() - center_x as i32, event.client_y() - center_y as i32);
 	})
 	.forget();
+
+	// `mousedown` event listener.
+	let control_state_cp = control_state.clone();
+	EventListener::new(&document, "mousedown", move |_event| {
+		let mut state = control_state_cp.lock_mut();
+		state.mouse_down();
+	}).forget();
+
+	// `mouseup` event listener.
+	let control_state_cp = control_state.clone();
+	EventListener::new(&document, "mouseup", move |_event| {
+		let mut state = control_state_cp.lock_mut();
+		state.mouse_up();
+	}).forget();
 
 	// Wait for username input.
 	let mut name_stream = name_state.signal().to_stream();

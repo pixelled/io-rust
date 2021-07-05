@@ -44,6 +44,8 @@ pub struct PlayerState {
 	pub dir: Option<f32>,
 	/// The orientation of shield.
 	pub ori: f32,
+	/// If the player pushes shield or not.
+	pub push_shield: bool,
 }
 
 impl PlayerState {

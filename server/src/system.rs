@@ -11,8 +11,8 @@ use bevy_rapier2d::rapier::geometry::{ContactEvent, ColliderShape, ColliderMater
 use bevy::prelude::*;
 use bevy::ecs::system::Command;
 use bevy_rapier2d::rapier::geometry::ColliderMassProps::MassProperties;
-use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams, RigidBodyPosition};
-use bevy_rapier2d::rapier::na::{UnitVector2, Rotation, Rotation2, Unit, UnitQuaternion, UnitComplex, Complex};
+use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams, RigidBodyPosition, PrismaticJoint};
+use bevy_rapier2d::rapier::na::{UnitVector2, Rotation, Rotation2, Unit, UnitQuaternion, UnitComplex, Complex, Vector};
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -38,14 +38,11 @@ fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body
 		commands.entity(entity).insert(Player { name })
 		// commands.spawn(()).with(Parent(entity))
 		},
-		Role::Boundary(info) => commands.entity(entity).insert(Boundary { info }),
-		Role::CelestialBody(form) => commands.entity(entity).insert(CelestialBody { form }),
 		Role::Shape(id) => commands.entity(entity).insert(Shape {id}),
+		_ => panic!(),
 	};
 	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider)
 		.insert(RigidBodyPositionSync::Discrete);
-	// commands.entity(entity).insert(rigid_body_builder.translation(x, y).user_data(entity.to_bits() as u128));
-	// commands.spawn_bundle((collider_builder.user_data(true as u128),)).with(Parent(entity));
 
 	entity
 }
@@ -197,11 +194,14 @@ pub fn create_player(
 		};
 		let entity_shield = create_shield(&mut commands, ShieldType::Circle, x_shield, y_shield, rigid_body, collider);
 
-		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } )
-			.insert(Parent(entity_body));
+		commands.entity(entity_body).insert(ShieldID { entity: entity_shield } );
+			// .insert(Parent(entity_body));
 
-		let mut joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(60.0, 0.0).into());
-		joint.configure_motor_velocity(20.0, 0.5);
+		// let mut joint = BallJoint::new(Vec2::ZERO.into(), Vec2::new(60.0, 0.0).into());
+		let x = Vector::x_axis();
+		let mut joint = PrismaticJoint::new(Vec2::ZERO.into(), x, Vec2::new(0.0, 0.0).into(), x);
+		joint.limits = [-80.0, -60.0];
+		// joint.configure_motor_velocity(20.0, 0.5);
 		commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
 
 		game_state.sessions.insert(entity_body, event.session.clone());
@@ -218,6 +218,7 @@ impl Command for ChangeMovement {
 		thrust.y = fy * 40000.0;
 		let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
 		ori.deg = self.state.ori;
+
 	}
 }
 
@@ -238,23 +239,39 @@ pub fn remove_player(
 	}
 }
 
-pub fn simulate_shield(players: Query<(&Transform, &Ori, &ShieldID), With<Player>>,
+/*pub fn simulate_shield(players: Query<(&Transform, &Ori, &ShieldID), With<Player>>,
 					   mut shields: Query<(&Transform, &mut RigidBodyVelocity), Or<(With<ShieldType>, With<Player>)>>) {
-	for (body_transform, ori, shield_id) in players.iter() {
-		let (shield_transform, mut shield_rb_vel) = shields.get_mut(shield_id.entity).expect("Shield entity not found.");
-		let diff = shield_transform.translation - body_transform.translation;
-		let diff_ori = ori.deg - diff.y.atan2(diff.x);
-		let angle = std::f32::consts::PI;
+	// for (body_transform, ori, shield_id) in players.iter() {
+	// 	let (shield_transform, mut shield_rb_vel) = shields.get_mut(shield_id.entity).expect("Shield entity not found.");
+	// 	let diff = shield_transform.translation - body_transform.translation;
+	// 	let diff_ori = ori.deg - diff.y.atan2(diff.x);
+	// 	let angle = std::f32::consts::PI;
+	//
+	// 	if diff_ori.abs() < 0.1 {
+	// 		shield_rb_vel.linvel = Vec2::new(0.0, 0.0).into();
+	// 	} else {
+	// 		if (diff_ori > 0.0 && diff_ori < angle) || diff_ori < -angle {
+	// 			// Clockwise.
+	// 			shield_rb_vel.linvel = Vec2::new(-diff.y * 10.0, diff.x * 10.0).into();
+	// 		} else {
+	// 			shield_rb_vel.linvel = Vec2::new(diff.y * 10.0, -diff.x * 10.0).into();
+	// 		}
+	// 	}
+	// }
+}*/
 
-		if diff_ori.abs() < 0.1 {
-			shield_rb_vel.linvel = Vec2::new(0.0, 0.0).into();
-		} else {
-			if (diff_ori > 0.0 && diff_ori < angle) || diff_ori < -angle {
-				// Clockwise.
-				shield_rb_vel.linvel = Vec2::new(-diff.y * 10.0, diff.x * 10.0).into();
-			} else {
-				shield_rb_vel.linvel = Vec2::new(diff.y * 10.0, -diff.x * 10.0).into();
-			}
+pub fn simulate_shield(mut joint_set: ResMut<JointSet>,
+					   players: Query<(&Transform, &Ori/*, &JointHandleComponent*/), With<Player>>,
+					   joints: Query<(&JointHandleComponent)>) {
+	for (joint_handle, joint) in joint_set.iter_mut() {
+		match &mut joint.params {
+			JointParams::PrismaticJoint(prismatic_joint) => {
+				// println!("before: {}", prismatic_joint.motor_target_vel);
+				prismatic_joint.configure_motor_velocity(-10.0, 0.5);
+				// println!("after: {}", prismatic_joint.motor_target_vel);
+				// ball_joint.configure_motor_position(Unit::new_normalize(Complex::new(1.0, 0.0)), 1.0, 0.5);
+			},
+			_ => panic!(),
 		}
 	}
 }
