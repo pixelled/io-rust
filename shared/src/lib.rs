@@ -33,6 +33,12 @@ pub struct Position {
 	pub y: f32,
 }
 
+impl Default for Position {
+	fn default() -> Self {
+		Position { x: 0.0, y: 0.0 }
+	}
+}
+
 pub struct Ori {
 	/// Radians.
 	pub deg: f32,
