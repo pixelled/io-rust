@@ -1,10 +1,13 @@
-use game_shared::{CelestialView, PlayerView, Position, StaticView, ViewSnapshot, CELESTIAL_RADIUS, INIT_RADIUS, MAP_WIDTH, MAP_HEIGHT, VIEW_X, VIEW_Y, ShieldView, SHIELD_RADIUS};
-use piet::kurbo::{Circle, CircleSegment, Rect, Line};
+use game_shared::{
+	CelestialView, PlayerView, Position, ShieldView, StaticView, ViewSnapshot, CELESTIAL_RADIUS,
+	INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, SHIELD_RADIUS, VIEW_X, VIEW_Y,
+};
+use piet::kurbo::{Circle, CircleSegment, Line, Rect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
+use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::time::Duration;
-use std::cmp::{max, min};
 
 #[derive(Clone)]
 pub struct PlayerState {
@@ -46,14 +49,23 @@ impl From<ViewSnapshot> for RenderState {
 			// Convert `PlayerView` into `PlayerState` to include shields' info.
 			players: {
 				let shields: HashMap<u64, ShieldView> = view.shield_info.into_iter().collect();
-				view.players.into_iter().map(|(id, player_view)| {
-					(id, PlayerState {
-						name: player_view.name,
-						pos: player_view.pos,
-						ori: player_view.ori,
-						shield_pos: shields.get(&player_view.shield_id).expect("No shields match this player.").pos,
+				view.players
+					.into_iter()
+					.map(|(id, player_view)| {
+						(
+							id,
+							PlayerState {
+								name: player_view.name,
+								pos: player_view.pos,
+								ori: player_view.ori,
+								shield_pos: shields
+									.get(&player_view.shield_id)
+									.expect("No shields match this player.")
+									.pos,
+							},
+						)
 					})
-				}).collect()
+					.collect()
 			},
 			static_pos: view.static_pos.into_iter().collect(),
 			celestial_pos: view.celestial_pos.into_iter().collect(),
@@ -165,7 +177,11 @@ impl Render for FinalView {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
 		piet_ctx.clear(Color::rgb8(36, 39, 44));
 
-		let bg = Background { abs_pos: self.self_abs_pos, offset_x: self.offset.x as f64, offset_y: self.offset.y as f64 };
+		let bg = Background {
+			abs_pos: self.self_abs_pos,
+			offset_x: self.offset.x as f64,
+			offset_y: self.offset.y as f64,
+		};
 		bg.render(piet_ctx);
 
 		self.players.iter().for_each(|player_view| {
@@ -327,9 +343,11 @@ impl Interpolator {
 		let mut view = self.prev.interp_with(&self.next, t);
 
 		// Compute positions relative to the canvas (centered at the player's position) before rendering.
-		view.map.pos = Position { x: canvas.width() as f32 - 100.0 , y: canvas.height() as f32 - 100.0 };
+		view.map.pos =
+			Position { x: canvas.width() as f32 - 100.0, y: canvas.height() as f32 - 100.0 };
 		view.celestial_pos.iter().filter(|cele_view| {
-			(view.self_pos.x - cele_view.pos.x).abs() < VIEW_X && (view.self_pos.y - cele_view.pos.y).abs() < VIEW_Y
+			(view.self_pos.x - cele_view.pos.x).abs() < VIEW_X
+				&& (view.self_pos.y - cele_view.pos.y).abs() < VIEW_Y
 		});
 
 		// Compute the offsets between relative and absolute positions.
