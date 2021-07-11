@@ -15,6 +15,7 @@ pub struct PlayerState {
 }
 
 /// The scene ready for interpolation.
+/// (All in absolute positions.)
 pub struct RenderState {
 	pub time: Duration,
 	pub self_pos: Position,
@@ -24,8 +25,11 @@ pub struct RenderState {
 }
 
 /// The interpolated scene ready for rendering.
+/// (All in relative positions except being specified.)
 pub struct FinalView {
+	/// Absolute position of the player.
 	pub self_abs_pos: Position,
+	/// Absolute position - offset = relative position
 	pub offset: Position,
 	pub self_pos: Position,
 	pub players: Vec<PlayerState>,
@@ -123,6 +127,7 @@ struct Background {
 
 impl Render for Background {
 	fn render(&self, piet_ctx: &mut WebRenderContext) {
+		// TODO: highlight boundaries.
 		let left: f64 = (self.abs_pos.x - VIEW_X / 2.0) as f64;
 		let right: f64 = left + VIEW_X as f64;
 		let up: f64 = (self.abs_pos.y - VIEW_Y / 2.0) as f64;
@@ -138,10 +143,6 @@ impl Render for Background {
 
 		let brush = piet_ctx.solid_brush(Color::grey(0.5));
 
-		// let x_min = 0.0;
-		// let y_min = 0.0;
-		// let x_max = VIEW_X as f64;
-		// let y_max = VIEW_Y as f64;
 		let mut x = x_min;
 		let mut y = y_min;
 		while x < x_max {
@@ -290,6 +291,8 @@ impl Interpolate for RenderState {
 
 		let self_pos = self.self_pos.interp_with(&other.self_pos, t);
 		let cele_views = interp_items(&self.celestial_pos, &other.celestial_pos, t);
+
+		// This one contains absolute positions.
 		FinalView {
 			self_abs_pos: self_pos,
 			offset: Position::default(),
@@ -302,9 +305,13 @@ impl Interpolate for RenderState {
 	}
 }
 
+/// Interpolate between `prev` and `next` to prepare for rendering.
 pub struct Interpolator {
+	/// Initial timestamp set at the beginning.
 	base_time: f64,
+	/// Previous frame.
 	prev: RenderState,
+	/// Next frame.
 	next: RenderState,
 }
 

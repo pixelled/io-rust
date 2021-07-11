@@ -205,6 +205,8 @@ pub async fn start() {
 		))),
 		_ => futures::future::ready(None),
 	});
+
+	// Wait for two frames before rendering to allow interpolation.
 	let prev_frame = key_frames.next().await.unwrap();
 	let next_frame = key_frames.next().await.unwrap();
 	let mut stream = util::merge(
@@ -215,8 +217,10 @@ pub async fn start() {
 	let mut interpolator = Interpolator::new(perf.now(), prev_frame, next_frame);
 	while let Some(data) = stream.next().await {
 		match data {
+			// Start rendering if an animation frame is requested.
 			Either::Left(time) => interpolator.interpolate(time, &canvas).render(&mut piet_ctx),
 			Either::Right((render_state, control)) => {
+				// Update the interpolator if a scene is received.
 				interpolator.update(perf.now(), render_state);
 				if let Some(state) = control {
 					ws_sender

@@ -13,6 +13,7 @@ use bevy::ecs::system::Command;
 use bevy_rapier2d::rapier::geometry::ColliderMassProps::MassProperties;
 use bevy_rapier2d::rapier::dynamics::{RigidBodyType, RigidBodyVelocity, RigidBodyForces, RigidBodyMassProps, BallJoint, JointSet, JointHandle, JointParams, RigidBodyPosition, PrismaticJoint};
 use bevy_rapier2d::rapier::na::{UnitVector2, Rotation, Rotation2, Unit, UnitQuaternion, UnitComplex, Complex, Vector};
+use crate::component::Shape::Circle;
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -26,29 +27,25 @@ const CELESTIAL_DENSITY: f32 = 318.3;
 
 const GRAVITY_CONST: f32 = 20.0;
 
-/// TODO: remove this one and generalize as trait?
-fn create_entity(commands: &mut Commands, role: Role, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
-	let entity = commands.spawn_bundle((
-		Thrust {x: 0.0, y: 0.0},
-		Ori { deg: 0.0, push: false },
-		Transform::from_translation(Vec3::new(x, y, 0.0)),
-		Status {effects: Vec::new()},
-	)).id();
-	match role { Role::Player(name) => {
-		commands.entity(entity).insert(Player { name })
-		// commands.spawn(()).with(Parent(entity))
-		},
-		Role::Shape(id) => commands.entity(entity).insert(Shape {id}),
-		_ => panic!(),
-	};
-	commands.entity(entity).insert_bundle(rigid_body).insert_bundle(collider)
-		.insert(RigidBodyPositionSync::Discrete);
-
-	entity
+/// TODO: generalize `create_[...]` as a trait?
+fn create_body(commands: &mut Commands, name: String, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
+	commands
+		.spawn_bundle((
+			Player { name },
+			Thrust {x: 0.0, y: 0.0},
+			Ori { deg: 0.0, push: false },
+			Transform::from_translation(Vec3::new(x, y, 0.0)),
+			Status {effects: Vec::new()},
+		))
+		.insert_bundle(rigid_body)
+		.insert_bundle(collider)
+		.insert(RigidBodyPositionSync::Discrete)
+		.id()
 }
 
+/// Create a shield of `shield_type`.
 fn create_shield(commands: &mut Commands, shield_type: ShieldType, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
-	let entity = commands
+	commands
 		.spawn_bundle((
 			shield_type,
 			Transform::from_translation(Vec3::new(x, y, 0.0)),
@@ -56,8 +53,20 @@ fn create_shield(commands: &mut Commands, shield_type: ShieldType, x: f32, y: f3
 		.insert_bundle(rigid_body)
 		.insert_bundle(collider)
 		.insert(RigidBodyPositionSync::Discrete)
-		.id();
-	entity
+		.id()
+}
+
+/// Create a geometric objects with `shape`.
+fn create_object(commands: &mut Commands, shape: Shape, x: f32, y: f32, rigid_body: RigidBodyBundle, collider: ColliderBundle) -> Entity {
+	commands
+		.spawn_bundle((
+			shape,
+			Transform::from_translation(Vec3::new(x, y, 0.0)),
+		))
+		.insert_bundle(rigid_body)
+		.insert_bundle(collider)
+		.insert(RigidBodyPositionSync::Discrete)
+		.id()
 }
 
 /// Create a segmented-shape boundary centered at (`x`, `y`).
@@ -140,7 +149,7 @@ pub fn setup(mut commands: Commands, mut configuration: ResMut<RapierConfigurati
 			},
 			..Default::default()
 		};
-		create_entity(&mut commands, Role::Shape(0), x, y, rigid_body, collider);
+		create_object(&mut commands, Shape::Circle, x, y, rigid_body, collider);
 	}
 
 	// Add Celestial objects.
@@ -174,7 +183,7 @@ pub fn create_player(
 			},
 			..Default::default()
 		};
-		let entity_body = create_entity(&mut commands, Role::Player(event.name.clone()), x, y, rigid_body, collider);
+		let entity_body = create_body(&mut commands, event.name.clone(), x, y, rigid_body, collider);
 
 		// The entity of shield.
 		let x_shield = x + 40.0;
@@ -302,16 +311,9 @@ pub fn simulate(celestial_bodies: Query<(&Transform, &RigidBodyMassProps), With<
 	}
 }
 
-/*pub fn collisions(events: ResMut<EventQueue>, collider_set: Res<ColliderSet>, mut rigid_body_set: ResMut<RigidBodySet>) {
-	while let Ok(contact_event) = events.contact_events.pop() {
-		if let ContactEvent::Started(first_handle, second_handle) = contact_event {
-			let first_body = rigid_body_set.get(collider_set.get(first_handle).unwrap().parent()).unwrap();
-			let second_body = rigid_body_set.get( collider_set.get(second_handle).unwrap().parent()).unwrap();
-			let mut first_entity = Entity::from_bits(first_body.user_data as u64);
-			let mut second_entity = Entity::from_bits(second_body.user_data as u64);
-		}
-	}
-}*/
+pub fn compute_health() {
+
+}
 
 pub fn extract_render_state(
 	game_state: Res<GameServer>,
