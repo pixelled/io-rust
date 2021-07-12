@@ -27,6 +27,7 @@ use crate::server::GameServer;
 use crate::{View, WsSession};
 use actix::Addr;
 use futures::channel::oneshot::Sender;
+use bevy_rapier2d::rapier::pipeline::ActiveEvents;
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -245,6 +246,7 @@ fn create_player(
 		shape: ColliderShape::ball(SHIELD_RADIUS),
 		mass_properties: ColliderMassProps::Density(SHIELD_DENSITY),
 		material: ColliderMaterial { restitution: INIT_RESTITUTION, ..Default::default() },
+		flags: (ActiveEvents::CONTACT_EVENTS).into(),
 		..Default::default()
 	};
 	let entity_shield =
@@ -256,7 +258,7 @@ fn create_player(
 	let x = Vector::x_axis();
 	let mut joint = PrismaticJoint::new(Vec2::ZERO.into(), x, Vec2::new(0.0, 0.0).into(), x);
 	// The shield is limited to 60~80 px away from the body.
-	joint.limits = [-80.0, -60.0];
+	joint.limits = [-80.0, -20.0];
 	commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
 
 	game_state.sessions.insert(entity_body, session.clone());
@@ -266,26 +268,31 @@ fn create_player(
 
 /// Rotate shields towards the cursor's position `Ori.deg`.
 pub fn simulate_shield(
-	players: Query<(&Transform, &Ori, &ShieldID, &RigidBodyVelocity), With<Player>>,
-	mut shields: Query<(&Transform, &mut RigidBodyForces), (With<ShieldType>, Without<Player>)>,
+	mut players: Query<(&Transform, &Ori, &mut RigidBodyVelocity)>
 ) {
-	// for (body_transform, ori, shield_id, player_vel) in players.iter() {
-	// 	let (shield_transform, mut shield_rb_forces) = shields.get_mut(shield_id.entity).expect("Shield entity not found.");
-	// 	let diff = shield_transform.translation - body_transform.translation;
-	// 	let diff_ori = ori.deg - diff.y.atan2(diff.x);
-	// 	let angle = std::f32::consts::PI;
-	//
-	// 	if diff_ori.abs() < 0.1 {
-	// 		// shield_rb_vel.linvel = player_vel.linvel.clone();
-	// 	} else {
-	// 		if (diff_ori > 0.0 && diff_ori < angle) || diff_ori < -angle {
-	// 			// Clockwise.
-	// 			shield_rb_forces.force = Vec2::new(-diff.y * 1000.0, diff.x * 1000.0).into();
-	// 		} else {
-	// 			shield_rb_forces.force = Vec2::new(diff.y * 1000.0, -diff.x * 1000.0).into();
-	// 		}
-	// 	}
-	// }
+	for (body_transform, ori, mut player_vel) in players.iter_mut() {
+		let (axis, angle) = body_transform.rotation.to_axis_angle();
+		let mut ori_body = axis[2] * angle;
+		let pi = std::f32::consts::PI;
+		if ori_body >= 0.0 {
+			ori_body -= pi;
+		} else {
+			ori_body += pi;
+		}
+
+		let diff_ori = ori.deg - ori_body;
+
+		if diff_ori.abs() < 0.1 {
+			player_vel.angvel = 0.0;
+		} else {
+			if (diff_ori > 0.0 && diff_ori < pi) || diff_ori < -pi {
+				// Clockwise.
+				player_vel.angvel = 20.0;
+			} else {
+				player_vel.angvel = -20.0;
+			}
+		}
+	}
 }
 
 pub fn push_shield(
@@ -299,9 +306,9 @@ pub fn push_shield(
 		match &mut joint.params {
 			JointParams::PrismaticJoint(prismatic_joint) => {
 				if ori.push {
-					prismatic_joint.configure_motor_velocity(-200.0, 0.1);
+					prismatic_joint.configure_motor_velocity(-300.0, 0.1);
 				} else {
-					prismatic_joint.configure_motor_velocity(200.0, 0.1);
+					prismatic_joint.configure_motor_velocity(300.0, 0.1);
 				}
 			}
 			_ => panic!(),
@@ -358,6 +365,7 @@ pub fn extract_render_state(
 						PlayerView {
 							name: player.name.clone(),
 							pos: Position { x: pos.translation.x, y: pos.translation.y },
+							// TODO: the is unused in rendering.
 							ori: {
 								let (axis, angle) = pos.rotation.to_axis_angle();
 								axis[2] * angle
