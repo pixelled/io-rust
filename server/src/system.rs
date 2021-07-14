@@ -5,7 +5,7 @@ use bevy_rapier2d::physics::{
 	ColliderBundle, JointBuilderComponent, JointHandleComponent, RapierConfiguration,
 	RigidBodyBundle, RigidBodyPositionSync,
 };
-use bevy_rapier2d::prelude::RigidBodyCcd;
+use bevy_rapier2d::prelude::{RigidBodyCcd, IntoEntity};
 use bevy_rapier2d::rapier::dynamics::{
 	JointParams, JointSet, PrismaticJoint, RigidBodyForces, RigidBodyMassProps, RigidBodyType,
 	RigidBodyVelocity,
@@ -28,6 +28,7 @@ use crate::{View, WsSession};
 use actix::Addr;
 use futures::channel::oneshot::Sender;
 use bevy_rapier2d::rapier::pipeline::ActiveEvents;
+use bevy_rapier2d::rapier::prelude::ContactEvent;
 
 const INIT_MASS: f32 = 1.0;
 const INIT_RESTITUTION: f32 = 1.0;
@@ -56,7 +57,8 @@ fn create_body(
 			Thrust { x: 0.0, y: 0.0 },
 			Ori { deg: 0.0, push: false },
 			Transform::from_translation(Vec3::new(x, y, 0.0)),
-			Status { effects: Vec::new() },
+			Dmg { val: 1 },
+			HP { val: 100 },
 		))
 		.insert_bundle(rigid_body)
 		.insert_bundle(collider)
@@ -74,7 +76,12 @@ fn create_shield(
 	collider: ColliderBundle,
 ) -> Entity {
 	commands
-		.spawn_bundle((shield_type, Transform::from_translation(Vec3::new(x, y, 0.0))))
+		.spawn_bundle((
+			shield_type,
+			Transform::from_translation(Vec3::new(x, y, 0.0)),
+			Dmg { val: 1 },
+			HP { val: 100 },
+		))
 		.insert_bundle(rigid_body)
 		.insert_bundle(collider)
 		.insert(RigidBodyPositionSync::Discrete)
@@ -91,7 +98,12 @@ fn create_object(
 	collider: ColliderBundle,
 ) -> Entity {
 	commands
-		.spawn_bundle((shape, Transform::from_translation(Vec3::new(x, y, 0.0))))
+		.spawn_bundle((
+			shape,
+			Transform::from_translation(Vec3::new(x, y, 0.0)),
+			Dmg { val: 1 },
+			HP { val: 100 },
+		))
 		.insert_bundle(rigid_body)
 		.insert_bundle(collider)
 		.insert(RigidBodyPositionSync::Discrete)
@@ -103,7 +115,8 @@ fn create_seg_boundary(commands: &mut Commands, x: Vec2, y: Vec2) {
 	let entity = commands
 		.spawn_bundle((
 			Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-			Status { effects: Vec::new() },
+			Dmg { val: 1 },
+			HP { val: 100 },
 		))
 		.id();
 	let rigid_body = RigidBodyBundle { body_type: RigidBodyType::Static, ..Default::default() };
@@ -125,6 +138,8 @@ fn create_planet(commands: &mut Commands, x: f32, y: f32, linvel: Vec2) {
 		.spawn_bundle((
 			Thrust { x: 0.0, y: 0.0 },
 			Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+			Dmg { val: 1 },
+			HP { val: 100 },
 		))
 		.id();
 	let rigid_body = RigidBodyBundle {
@@ -230,6 +245,7 @@ fn create_player(
 		shape: ColliderShape::ball(INIT_RADIUS),
 		mass_properties: ColliderMassProps::Density(PLAYER_DENSITY),
 		material: ColliderMaterial { restitution: INIT_RESTITUTION, ..Default::default() },
+		flags: (ActiveEvents::CONTACT_EVENTS).into(),
 		..Default::default()
 	};
 	let entity_body = create_body(commands, name.clone(), x, y, rigid_body, collider);
@@ -257,7 +273,7 @@ fn create_player(
 	// Create a prismatic joint connecting the body and the shield.
 	let x = Vector::x_axis();
 	let mut joint = PrismaticJoint::new(Vec2::ZERO.into(), x, Vec2::new(0.0, 0.0).into(), x);
-	// The shield is limited to 60~80 px away from the body.
+	// The shield is limited to 20~80 px away from the body.
 	joint.limits = [-80.0, -20.0];
 	commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
 
@@ -267,13 +283,15 @@ fn create_player(
 }
 
 /// Rotate shields towards the cursor's position `Ori.deg`.
-pub fn simulate_shield(
+pub fn rotate_shield(
 	mut players: Query<(&Transform, &Ori, &mut RigidBodyVelocity)>
 ) {
 	for (body_transform, ori, mut player_vel) in players.iter_mut() {
 		let (axis, angle) = body_transform.rotation.to_axis_angle();
 		let mut ori_body = axis[2] * angle;
 		let pi = std::f32::consts::PI;
+
+		// Transform `ori_body` to the space of `ori.deg`.
 		if ori_body >= 0.0 {
 			ori_body -= pi;
 		} else {
@@ -285,11 +303,20 @@ pub fn simulate_shield(
 		if diff_ori.abs() < 0.1 {
 			player_vel.angvel = 0.0;
 		} else {
+			// TODO: simplify calculation.
 			if (diff_ori > 0.0 && diff_ori < pi) || diff_ori < -pi {
 				// Clockwise.
-				player_vel.angvel = 20.0;
+				if diff_ori.abs() < 0.5 {
+					player_vel.angvel = 5.0;
+				} else {
+					player_vel.angvel = 20.0;
+				}
 			} else {
-				player_vel.angvel = -20.0;
+				if diff_ori.abs() < 0.5 {
+					player_vel.angvel = -5.0;
+				} else {
+					player_vel.angvel = -20.0;
+				}
 			}
 		}
 	}
@@ -343,20 +370,47 @@ pub fn simulate(
 	}
 }
 
-pub fn compute_health() {}
+pub fn compute_dmg(
+	mut contact_events: EventReader<ContactEvent>,
+	dmg_query: Query<(&Dmg)>,
+	mut hp_query: Query<(&mut HP)>
+) {
+	let mut c = 0;
+	for contact_event in contact_events.iter() {
+		if let ContactEvent::Started(h1, h2) = contact_event {
+			let mut hp1 = hp_query.get_mut(h1.entity()).unwrap();
+			let dmg2 = dmg_query.get(h2.entity()).unwrap();
+			hp1.val -= dmg2.val;
+			let mut hp2 = hp_query.get_mut(h2.entity()).unwrap();
+			let dmg1 = dmg_query.get(h1.entity()).unwrap();
+			hp2.val -= dmg1.val;
+		}
+	}
+}
+
+pub fn restore_hp(
+	mut players: Query<(&Dmg, &mut HP, &ShieldID)>,
+	mut shields: Query<(&Dmg, &mut HP), (With<ShieldType>, Without<ShieldID>)>
+) {
+	// for (player_dmg, mut player_hp, shield_id) in players.iter_mut() {
+	// 	let (shield_dmg, mut shield_hp) = shields.get_mut(shield_id.entity).unwrap();
+	// 	shield_hp.val += player_dmg.val;
+	// 	player_hp.val += shield_dmg.val;
+	// }
+}
 
 pub fn extract_render_state(
 	game_state: Res<GameServer>,
-	query: Query<(Entity, &Player, &Transform, &ShieldID)>,
-	shields: Query<(Entity, &ShieldType, &Transform)>,
-	obj_query: Query<(Entity, &Shape, &Transform)>,
-	celestial_query: Query<(Entity, &CelestialBody, &Transform)>,
+	query: Query<(Entity, &HP, &Player, &Transform, &ShieldID)>,
+	shields: Query<(Entity, &HP, &ShieldType, &Transform)>,
+	obj_query: Query<(Entity, &HP, &Shape, &Transform)>,
+	celestial_query: Query<(Entity, &HP, &CelestialBody, &Transform)>,
 ) {
-	for (entity, _player, self_pos, _shield_id) in query.iter() {
+	for (entity, _hp, _player, self_pos, _shield_id) in query.iter() {
 		// Collect players' positions.
 		let positions = query
 			.iter()
-			.filter_map(|(entity, player, pos, shield_id)| {
+			.filter_map(|(entity, hp, player, pos, shield_id)| {
 				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X
 					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
 				{
@@ -365,12 +419,13 @@ pub fn extract_render_state(
 						PlayerView {
 							name: player.name.clone(),
 							pos: Position { x: pos.translation.x, y: pos.translation.y },
-							// TODO: the is unused in rendering.
+							// TODO: this isn't used in rendering.
 							ori: {
 								let (axis, angle) = pos.rotation.to_axis_angle();
 								axis[2] * angle
 							},
 							shield_id: shield_id.entity.to_bits(),
+							hp: hp.val,
 						},
 					))
 				} else {
@@ -381,13 +436,13 @@ pub fn extract_render_state(
 
 		let shield_info = shields
 			.iter()
-			.filter_map(|(entity, _, pos)| {
+			.filter_map(|(entity, hp, _, pos)| {
 				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X
 					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
 				{
 					Some((
 						entity.to_bits(),
-						ShieldView { pos: Position { x: pos.translation.x, y: pos.translation.y } },
+						ShieldView { pos: Position { x: pos.translation.x, y: pos.translation.y }, hp: hp.val },
 					))
 				} else {
 					None
@@ -398,13 +453,13 @@ pub fn extract_render_state(
 		// Collect positions of static objects.
 		let static_pos = obj_query
 			.iter()
-			.filter_map(|(entity, _, pos)| {
+			.filter_map(|(entity, hp, _, pos)| {
 				if (self_pos.translation.x - pos.translation.x).abs() < VIEW_X
 					&& (self_pos.translation.y - pos.translation.y).abs() < VIEW_Y
 				{
 					Some((
 						entity.to_bits(),
-						StaticView { pos: Position { x: pos.translation.x, y: pos.translation.y } },
+						StaticView { pos: Position { x: pos.translation.x, y: pos.translation.y }, hp: hp.val },
 					))
 				} else {
 					None
@@ -415,10 +470,10 @@ pub fn extract_render_state(
 		// Collect celestial positions.
 		let celestial_pos = celestial_query
 			.iter()
-			.map(|(entity, _, pos)| {
+			.map(|(entity, hp, _, pos)| {
 				(
 					entity.to_bits(),
-					CelestialView { pos: Position { x: pos.translation.x, y: pos.translation.y } },
+					CelestialView { pos: Position { x: pos.translation.x, y: pos.translation.y }, hp: hp.val },
 				)
 			})
 			.collect();
@@ -452,8 +507,8 @@ impl Command for ChangeMovement {
 	fn write(self: Box<Self>, world: &mut World) {
 		let (fy, fx) = self.state.dir.map_or((0.0, 0.0), |dir| dir.sin_cos());
 		let mut thrust = world.get_mut::<Thrust>(self.player).expect("No component found.");
-		thrust.x = fx * 40000.0;
-		thrust.y = fy * 40000.0;
+		thrust.x = fx * 20000.0;
+		thrust.y = fy * 20000.0;
 		let mut ori = world.get_mut::<Ori>(self.player).expect("No component found.");
 		ori.deg = self.state.ori;
 		ori.push = self.state.push_shield;

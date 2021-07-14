@@ -103,6 +103,7 @@ pub struct PlayerView {
 	pub pos: Position,
 	pub ori: f32,
 	pub shield_id: u64,
+	pub hp: i32,
 }
 
 impl PlayerView {
@@ -119,11 +120,13 @@ impl PlayerView {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ShieldView {
 	pub pos: Position,
+	pub hp: i32,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StaticView {
 	pub pos: Position,
+	pub hp: i32,
 }
 
 impl StaticView {
@@ -139,6 +142,7 @@ impl StaticView {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CelestialView {
 	pub pos: Position,
+	pub hp: i32,
 }
 
 impl CelestialView {

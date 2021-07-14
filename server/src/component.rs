@@ -4,6 +4,14 @@ pub enum Shape {
 	Circle,
 }
 
+pub struct Dmg {
+	pub val: i32,
+}
+
+pub struct HP {
+	pub val: i32,
+}
+
 pub struct ShieldID {
 	pub entity: Entity,
 }

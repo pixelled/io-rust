@@ -2,7 +2,7 @@ use game_shared::{
 	CelestialView, PlayerView, Position, ShieldView, StaticView, ViewSnapshot, CELESTIAL_RADIUS,
 	INIT_RADIUS, MAP_HEIGHT, MAP_WIDTH, SHIELD_RADIUS, VIEW_X, VIEW_Y,
 };
-use piet::kurbo::{Circle, CircleSegment, Line, Rect};
+use piet::kurbo::{Circle, CircleSegment, Line, Rect, RoundedRect};
 use piet::{Color, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
 use piet_web::WebRenderContext;
 use std::cmp::{max, min};
@@ -15,6 +15,8 @@ pub struct PlayerState {
 	pub pos: Position,
 	pub ori: f32,
 	pub shield_pos: Position,
+	pub body_hp: i32,
+	pub shield_hp: i32,
 }
 
 /// The scene ready for interpolation.
@@ -52,16 +54,16 @@ impl From<ViewSnapshot> for RenderState {
 				view.players
 					.into_iter()
 					.map(|(id, player_view)| {
+						let shield_view = shields.get(&player_view.shield_id).expect("No shields match this player.");
 						(
 							id,
 							PlayerState {
 								name: player_view.name,
 								pos: player_view.pos,
 								ori: player_view.ori,
-								shield_pos: shields
-									.get(&player_view.shield_id)
-									.expect("No shields match this player.")
-									.pos,
+								shield_pos: shield_view.pos,
+								body_hp: player_view.hp,
+								shield_hp: shield_view.hp,
 							},
 						)
 					})
@@ -84,19 +86,23 @@ impl Render for PlayerState {
 		let x = self.pos.x as f64;
 		let y = self.pos.y as f64;
 
+		let brush_fill = piet_ctx.solid_brush(Color::rgb8(128, 153, 255));
+		let brush_stroke = piet_ctx.solid_brush(Color::rgb8(204, 214, 255));
+		let brush_shield_stroke = piet_ctx.solid_brush(Color::rgb8(242, 245, 255));
+		let brush_hp_bar_fill = piet_ctx.solid_brush(Color::from_hex_str("F75649").unwrap());
+		let brush_hp_bar_stroke = piet_ctx.solid_brush(Color::grey(0.9));
+
 		// Render body.
 		let shape = Circle::new((x, y), INIT_RADIUS as f64);
-		let brush = piet_ctx.solid_brush(Color::SILVER);
-		piet_ctx.fill(&shape, &brush);
-		let brush1 = piet_ctx.solid_brush(Color::grey(0.9));
-		piet_ctx.stroke(&shape, &brush1, 5.0);
+		piet_ctx.fill(&shape, &brush_fill);
+		piet_ctx.stroke(&shape, &brush_stroke, 5.0);
 
 		// Render shield.
 		let x_shield = self.shield_pos.x;
 		let y_shield = self.shield_pos.y;
 		let shape = Circle::new((x_shield as f64, y_shield as f64), SHIELD_RADIUS as f64);
-		let brush = piet_ctx.solid_brush(Color::grey(0.7));
-		piet_ctx.fill(&shape, &brush);
+		piet_ctx.fill(&shape, &brush_stroke);
+		piet_ctx.stroke(&shape, &brush_shield_stroke, 5.0);
 
 		// Render text.
 		let layout = piet_ctx
@@ -107,6 +113,16 @@ impl Render for PlayerState {
 			.build()
 			.unwrap();
 		piet_ctx.draw_text(&layout, (x - layout.size().width / 2.0, y - 80.0));
+
+		// Render health.
+		let y_hp = y + 40.0;
+		let hp_bar_len = 30.0;
+		let hp_height = 5.0;
+		let hp_len = self.body_hp as f64 / 100.0 * hp_bar_len;
+		let shape = RoundedRect::new(x - hp_bar_len, y_hp + hp_height, x - hp_bar_len + hp_len, y_hp, hp_height / 2.0);
+		piet_ctx.fill(&shape, &brush_hp_bar_fill);
+		let hp_bar_shape = RoundedRect::new(x - hp_bar_len, y_hp + hp_height, x + hp_bar_len, y_hp, hp_height / 2.0);
+		piet_ctx.stroke(&hp_bar_shape, &brush_hp_bar_stroke, 2.0);
 	}
 }
 
@@ -268,6 +284,8 @@ impl Interpolate for PlayerState {
 			pos: self.pos.interp_with(&other.pos, t),
 			ori: other.ori,
 			shield_pos: self.shield_pos.interp_with(&other.shield_pos, t),
+			body_hp: other.body_hp,
+			shield_hp: other.shield_hp,
 		}
 	}
 }
@@ -276,7 +294,7 @@ impl Interpolate for StaticView {
 	type Output = StaticView;
 
 	fn interp_with(&self, other: &StaticView, t: f32) -> StaticView {
-		StaticView { pos: self.pos.interp_with(&other.pos, t) }
+		StaticView { pos: self.pos.interp_with(&other.pos, t), hp: other.hp }
 	}
 }
 
@@ -284,7 +302,7 @@ impl Interpolate for CelestialView {
 	type Output = CelestialView;
 
 	fn interp_with(&self, other: &CelestialView, t: f32) -> CelestialView {
-		CelestialView { pos: self.pos.interp_with(&other.pos, t) }
+		CelestialView { pos: self.pos.interp_with(&other.pos, t), hp: other.hp }
 	}
 }
 

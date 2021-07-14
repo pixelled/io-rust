@@ -143,9 +143,11 @@ async fn main() {
 					SystemSet::on_update(GameState::Playing)
 						.with_run_criteria(FixedTimestep::step(TICK_TIME.as_secs_f64()))
 						.with_system(system::handle_events.system())
-						.with_system(system::simulate_shield.system())
+						.with_system(system::rotate_shield.system())
 						.with_system(system::push_shield.system())
 						.with_system(system::simulate.system())
+						.with_system(system::compute_dmg.system())
+						.with_system(system::restore_hp.system())
 						.with_system(system::extract_render_state.system()),
 				)
 				//.add_system(system::collisions.system())
