@@ -5,7 +5,7 @@ use bevy_rapier2d::physics::{
 	ColliderBundle, JointBuilderComponent, JointHandleComponent, RapierConfiguration,
 	RigidBodyBundle, RigidBodyPositionSync,
 };
-use bevy_rapier2d::prelude::{RigidBodyCcd, IntoEntity};
+use bevy_rapier2d::prelude::{RigidBodyCcd, IntoEntity, ColliderFlags, InteractionGroups};
 use bevy_rapier2d::rapier::dynamics::{
 	JointParams, JointSet, PrismaticJoint, RigidBodyForces, RigidBodyMassProps, RigidBodyType,
 	RigidBodyVelocity,
@@ -245,7 +245,11 @@ fn create_player(
 		shape: ColliderShape::ball(INIT_RADIUS),
 		mass_properties: ColliderMassProps::Density(PLAYER_DENSITY),
 		material: ColliderMaterial { restitution: INIT_RESTITUTION, ..Default::default() },
-		flags: (ActiveEvents::CONTACT_EVENTS).into(),
+		flags: ColliderFlags {
+			collision_groups: InteractionGroups::new(0b01, 0b01),
+			active_events: ActiveEvents::CONTACT_EVENTS,
+			..Default::default()
+		},
 		..Default::default()
 	};
 	let entity_body = create_body(commands, name.clone(), x, y, rigid_body, collider);
@@ -262,7 +266,11 @@ fn create_player(
 		shape: ColliderShape::ball(SHIELD_RADIUS),
 		mass_properties: ColliderMassProps::Density(SHIELD_DENSITY),
 		material: ColliderMaterial { restitution: INIT_RESTITUTION, ..Default::default() },
-		flags: (ActiveEvents::CONTACT_EVENTS).into(),
+		flags: ColliderFlags {
+			collision_groups: InteractionGroups::new(0b01, 0b01),
+			active_events: ActiveEvents::CONTACT_EVENTS,
+			..Default::default()
+		},
 		..Default::default()
 	};
 	let entity_shield =
@@ -274,7 +282,7 @@ fn create_player(
 	let x = Vector::x_axis();
 	let mut joint = PrismaticJoint::new(Vec2::ZERO.into(), x, Vec2::new(0.0, 0.0).into(), x);
 	// The shield is limited to 20~80 px away from the body.
-	joint.limits = [-80.0, -20.0];
+	joint.limits = [-80.0, -60.0];
 	commands.spawn().insert(JointBuilderComponent::new(joint, entity_body, entity_shield));
 
 	game_state.sessions.insert(entity_body, session.clone());
@@ -333,9 +341,11 @@ pub fn push_shield(
 		match &mut joint.params {
 			JointParams::PrismaticJoint(prismatic_joint) => {
 				if ori.push {
+					prismatic_joint.limits = [-80.0, -70.0];
 					prismatic_joint.configure_motor_velocity(-300.0, 0.1);
 				} else {
-					prismatic_joint.configure_motor_velocity(300.0, 0.1);
+					prismatic_joint.limits = [-60.0, -55.0];
+					prismatic_joint.configure_motor_velocity(-300.0, 0.1);
 				}
 			}
 			_ => panic!(),
@@ -375,7 +385,6 @@ pub fn compute_dmg(
 	dmg_query: Query<(&Dmg)>,
 	mut hp_query: Query<(&mut HP)>
 ) {
-	let mut c = 0;
 	for contact_event in contact_events.iter() {
 		if let ContactEvent::Started(h1, h2) = contact_event {
 			let mut hp1 = hp_query.get_mut(h1.entity()).unwrap();
