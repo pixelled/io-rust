@@ -1,3 +1,6 @@
 # io-rust
 
-December 19th, 2020
+To compile the client, cd into the client directory and run `./build.sh`.
+
+To run the game server in the release mode, run `cargo run -p game-server --release` in the project directory.\
+Open [http://localhost:8080](http://localhost:8080) to view it in the browser.
